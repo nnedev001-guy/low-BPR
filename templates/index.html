@@ -372,7 +372,7 @@ function renderReport() {
 
   const listTag = d.list && d.list.date ? ` · 명단 ${fmtListDate(d.list.date)} 공표 ${d.list.count}개사` : '';
   const listWarn = d.list && d.list.changed_in_period && d.list.changed_in_period.length
-    ? `<div class="sub warnnote" style="margin:4px 0 6px">기간 중 ${d.list.changed_in_period.map(fmtListDate).join(', ')}에 새 명단이 공표됐지만, 이 보고서는 기간 시작일 기준 명단으로 집계했습니다.</div>` : '';
+    ? `<div class="sub warnnote" style="margin:4px 0 6px">기간 중 ${d.list.changed_in_period.map(fmtListDate).join(', ')}에 새 명단이 공표됐지만, 이 보고서는 기간 첫 거래일 기준 명단으로 집계했습니다.</div>` : '';
   $('#content').innerHTML = `
   <div class="print-only" style="margin-bottom:8px"><b>보고 기간</b> ${d.week.label} · ${period} · 보합 ±${d.band}%${listTag}</div>
   <section class="card">
