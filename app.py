@@ -3,6 +3,7 @@ import datetime as dt
 import os
 import threading
 import time
+import traceback
 from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -75,21 +76,73 @@ def index():
     return send_from_directory(os.path.join(app.root_path, "templates"), "index.html")
 
 
+@app.before_request
+def _t0():
+    request._t0 = time.time()
+
+
+@app.after_request
+def _log(resp):
+    if request.path.startswith("/api/"):
+        print(f"[req] {request.method} {request.full_path} -> {resp.status_code} "
+              f"{(time.time() - getattr(request, '_t0', time.time())) * 1000:.0f}ms", flush=True)
+    return resp
+
+
 @app.route("/api/weeks")
 def weeks():
-    return jsonify({
-        "weeks": report.available_weeks(),
-        "months": report.available_months(),
-        "range": report.data_range(),
-        "companies": store.load_companies(),
-        "universe": len(store.load_companies()),
-        "last_refresh": store.get_meta("last_refresh"),
-        "last_refresh_ok": int(store.get_meta("last_refresh_ok", "0") or 0),
-        "last_refresh_errors": (store.get_meta("last_refresh_errors") or "").splitlines()[:5],
+    companies = store.load_companies()
+    out = {
+        "companies": companies,
+        "universe": len(companies),
         "refreshing": _lock.locked(),
         "progress": dict(refresh.PROGRESS),
         "build": BUILD,
-    })
+        "weeks": [], "months": [], "range": {"min": None, "max": None},
+        "last_refresh": None, "last_refresh_ok": 0, "last_refresh_errors": [],
+    }
+    try:
+        out.update({
+            "weeks": report.available_weeks(),
+            "months": report.available_months(),
+            "range": report.data_range(),
+            "last_refresh": store.get_meta("last_refresh"),
+            "last_refresh_ok": int(store.get_meta("last_refresh_ok", "0") or 0),
+            "last_refresh_errors": (store.get_meta("last_refresh_errors") or "").splitlines()[:5],
+        })
+    except Exception as e:  # DB 문제여도 화면에는 원인을 보여 준다
+        print("[weeks] DB 오류:", repr(e), flush=True)
+        traceback.print_exc()
+        out["last_refresh_errors"] = [f"데이터 파일 오류: {e!r}"]
+    return jsonify(out)
+
+
+@app.route("/api/diag")
+def diag():
+    """배포 환경 점검용: 단계별 소요 시간."""
+    steps, t = [], time.time()
+
+    def mark(name, fn):
+        nonlocal t
+        try:
+            val = fn()
+            steps.append({"step": name, "ok": True, "ms": round((time.time() - t) * 1000), "value": val})
+        except Exception as e:
+            steps.append({"step": name, "ok": False, "ms": round((time.time() - t) * 1000), "error": repr(e)})
+        t = time.time()
+
+    mark("companies", lambda: len(store.load_companies()))
+    mark("db_path", lambda: store.DB_PATH)
+    mark("db_meta", lambda: store.get_meta("last_refresh"))
+    mark("db_rows", lambda: _count_rows())
+    mark("naver", lambda: len(refresh.fetch("KOSPI", 3)[1]))
+    return jsonify({"build": BUILD, "refreshing": _lock.locked(), "progress": dict(refresh.PROGRESS),
+                    "threads": [th.name for th in threading.enumerate()], "steps": steps})
+
+
+def _count_rows():
+    with store.connect() as c:
+        return c.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
 
 
 @app.route("/api/report")
@@ -129,6 +182,9 @@ def api_refresh():
 @app.route("/healthz")
 def healthz():
     return "ok"
+
+
+print(f"[app] 시작 · DB {store.DB_PATH} · 명단 {len(store.load_companies())}개사", flush=True)
 
 
 if __name__ == "__main__":

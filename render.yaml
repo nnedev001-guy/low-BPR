@@ -12,3 +12,5 @@ services:
         value: 3.12.7
       - key: TZ
         value: Asia/Seoul
+      - key: DB_PATH
+        value: /tmp/lowpbr/prices.db

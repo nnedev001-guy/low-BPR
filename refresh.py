@@ -77,16 +77,16 @@ def run(verbose=True):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(one, symbols))
-    with store.connect() as c:
-        for sym, rows, err in results:
-            if err or not rows:
-                errors.append(f"{sym}: {err or '데이터 없음'}")
-                continue
-            c.executemany(
-                "INSERT OR REPLACE INTO prices(code,date,open,high,low,close,volume) VALUES (?,?,?,?,?,?,?)",
-                [(sym, *r) for r in rows],
-            )
-            ok += 1
+    rows_by_code = {}
+    for sym, rows, err in results:
+        if err or not rows:
+            errors.append(f"{sym}: {err or '데이터 없음'}")
+            rows_by_code[sym] = None          # 기존 값 유지
+            continue
+        rows_by_code[sym] = rows
+        ok += 1
+    if ok:
+        store.replace_prices(rows_by_code)    # 새 파일로 만든 뒤 한 번에 교체 (잠금 없음)
     now = dt.datetime.now(KST).isoformat(timespec="seconds")
     store.set_meta("last_refresh", now)
     store.set_meta("last_refresh_errors", "\n".join(errors))
