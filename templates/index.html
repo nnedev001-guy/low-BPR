@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>저PBR 기업 주가 동향</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="/static/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #f0f0ed; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+  --up: #d63b3a; --down: #2a78d6; --flat: #8a8984;
+  --s-lowpbr: #6250d6; --s-kospi: #eb6834; --s-kosdaq: #1baf7a;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948;
+  --accent: #1c3f74; --on-accent: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+    --up: #e66767; --down: #3987e5; --flat: #8f8e86;
+    --s-lowpbr: #9085e9; --s-kospi: #d95926; --s-kosdaq: #199e70;
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+    --accent: #86b6ef; --on-accent: #0b0b0b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+  --up: #e66767; --down: #3987e5; --flat: #8f8e86;
+  --s-lowpbr: #9085e9; --s-kospi: #d95926; --s-kosdaq: #199e70;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+  --accent: #86b6ef; --on-accent: #0b0b0b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 60px; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+h1 { font-size: 22px; margin: 0; }
+.sub { color: var(--text-2); font-size: 13px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controlbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+.controlbar .spacer { flex: 1; }
+select, button, input { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); }
+select, button { cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.viewtabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.viewtabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 14px; font-weight: 500; color: var(--text-2); }
+.viewtabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+.card h2 { font-size: 16px; margin: 0 0 12px; }
+.headline { font-size: 17px; font-weight: 500; margin: 0 0 4px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--surface-2); border-radius: 8px; padding: 12px; }
+.kpi .label { color: var(--text-2); font-size: 12px; }
+.kpi .value { font-size: 24px; font-weight: 700; }
+.kpi .value.sm { font-size: 19px; }
+.kpi .note { color: var(--text-2); font-size: 12px; }
+.mark { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.mark.line { height: 3px; width: 14px; vertical-align: 3px; }
+.stackbar { display: flex; height: 26px; gap: 2px; margin: 14px 0 6px; }
+.stackbar div { height: 100%; }
+.stackbar div:first-child { border-radius: 4px 0 0 4px; }
+.stackbar div:last-child { border-radius: 0 4px 4px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text-2); font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; }
+.grid2 > * { min-width: 0; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0,1fr); } }
+.chartbox { position: relative; height: 260px; }
+.chartbox.tall { height: 340px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; background: var(--surface-2); }
+td.l, th.l { text-align: left; }
+.tablewrap { overflow-x: auto; }
+.pos { color: var(--up); } .neg { color: var(--down); } .zero { color: var(--text-2); }
+tr.row { cursor: pointer; } tr.row:hover td { background: var(--surface-2); }
+tr.detail td { background: var(--surface-2); text-align: left; white-space: normal; }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); }
+.empty { color: var(--text-2); padding: 24px; text-align: center; }
+.warn { border-left: 4px solid #eda100; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; border-right: 1px solid var(--border); padding: 6px 12px; }
+.seg button:last-child { border-right: none; }
+.seg button.on { background: var(--accent); color: var(--on-accent); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 10px; }
+.filters .lbl { color: var(--text-2); font-size: 12px; margin-right: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 13px; }
+.chip button { border: none; background: none; padding: 0 4px; color: var(--text-2); font-size: 15px; line-height: 1; }
+.searchbox { position: relative; }
+.searchbox input { width: 240px; }
+.suggest { position: absolute; z-index: 10; top: 100%; left: 0; right: 0; max-height: 260px; overflow-y: auto; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; margin-top: 2px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; }
+.suggest div { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.suggest div:hover, .suggest div.hi { background: var(--surface-2); }
+.foot { color: var(--muted); font-size: 12px; margin-top: 20px; }
+.print-only, img.printimg { display: none; }
+/* PDF 캡처 모드 */
+.pdfmode .noprint, .pdfmode .controlbar, .pdfmode .viewtabs, .pdfmode header .controls { display: none !important; }
+.pdfmode .print-only { display: block; }
+.pdfmode .chip button, .pdfmode #clearsel { display: none !important; }
+.pdfmode .chip { padding-right: 10px; }
+.pdfmode .tablewrap { overflow: visible; }
+.pdfmode body { background: #fff; }
+.pdfmode .wrap { width: 1040px; max-width: none; margin: 0; padding: 0; }
+.pdfmode .card { border-color: #d6d5cf; }
+@media print {
+  .chip button, #clearsel { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+  body { background: #fff; font-size: 11px; }
+  .wrap { max-width: none; padding: 0; }
+  .controls, .controlbar, .viewtabs, .noprint { display: none !important; }
+  .print-only { display: block; }
+  .card { border: 1px solid #ccc; break-inside: avoid; padding: 12px; margin-bottom: 8px; }
+  .card.splittable { break-inside: auto; }
+  .card h2 { font-size: 13px; margin-bottom: 6px; }
+  .page-break { break-before: page; }
+  .chartbox { height: auto !important; }
+  .chartbox canvas { display: none !important; }
+  .chartbox img.printimg { display: block; max-width: 100%; max-height: 170px; width: auto; height: auto; margin: 0 auto; }
+  .chartbox.tall img.printimg { max-height: 260px; }
+  .kpis { margin-bottom: 8px; gap: 6px; grid-template-columns: repeat(6, 1fr); }
+  .kpi .value { font-size: 18px; } .kpi .value.sm { font-size: 14px; }
+  th, td { padding: 3px 5px; }
+  table { font-size: 9.5px; }
+  tr { break-inside: avoid; }
+  .tablewrap { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <header class="top">
+    <div>
+      <h1 id="title">저PBR 기업 주가 동향</h1>
+      <div class="sub" id="meta">KIND 공표 저PBR 기업 · 불러오는 중…</div>
+    </div>
+    <div class="controls">
+      <button id="refresh" title="네이버 시세에서 최신 데이터를 다시 받습니다">데이터 갱신</button>
+    </div>
+  </header>
+
+  <nav class="viewtabs">
+    <button data-view="report" class="on">기간 보고서</button>
+    <button data-view="compare">기업 비교</button>
+  </nav>
+
+  <!-- 기간 보고서 -->
+  <section id="view-report">
+    <div class="controlbar">
+      <label>기간 단위 <select id="kind">
+        <option value="week">주간</option>
+        <option value="weeks">여러 주 합산</option>
+        <option value="month">월간</option>
+      </select></label>
+      <label id="lbl-a"><span id="lbl-a-text">주차</span> <select id="pa"></select></label>
+      <label id="lbl-b" style="display:none">~ <select id="pb"></select></label>
+      <label>보합 범위 <select id="band">
+        <option value="0.5">±0.5%</option>
+        <option value="0.75">±0.75%</option>
+        <option value="1">±1.0%</option>
+      </select></label>
+      <span class="spacer"></span>
+      <button onclick="window.print()">인쇄</button>
+      <button class="primary" id="pdf-report">PDF 다운로드</button>
+    </div>
+    <div id="content"><div class="card empty">불러오는 중…</div></div>
+  </section>
+
+  <!-- 기업 비교 -->
+  <section id="view-compare" style="display:none">
+    <div class="controlbar">
+      <div class="searchbox">
+        <input id="search" placeholder="기업명 또는 종목코드 검색" autocomplete="off">
+        <div class="suggest" id="suggest"></div>
+      </div>
+      <label>시작 <input type="date" id="cstart"></label>
+      <label>종료 <input type="date" id="cend"></label>
+      <label><input type="checkbox" id="cindex" checked style="padding:0"> 지수 함께 보기</label>
+      <span class="spacer"></span>
+      <button onclick="window.print()">인쇄</button>
+      <button class="primary" id="pdf-compare">PDF 다운로드</button>
+    </div>
+    <div class="chips" id="chips" style="margin-bottom:12px"></div>
+    <div id="ccontent"><div class="card empty">비교할 기업을 검색해서 추가하세요. 최대 8개사까지 선택할 수 있습니다.</div></div>
+  </section>
+
+  <div class="foot">기준: 기간 등락률 = 기간 첫 거래일 시가 → 마지막 거래일 종가. 지수 대비 = 기업 등락률 − 소속 시장 지수 등락률(%p).
+    시세 출처: 네이버 금융 일봉. 대상: 한국거래소 KIND 기업밸류업 통합페이지 저PBR 기업 공표 명단(2026-11-02 공표).</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtPct = (v, d = 2) => v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(d) + '%';
+const fmtPp = v => v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
+const cls = v => v == null ? 'zero' : v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+const num = v => v == null ? '–' : Number(v).toLocaleString('ko-KR', {maximumFractionDigits: 2});
+const md = iso => `${+iso.slice(5,7)}/${+iso.slice(8,10)}`;
+const diff = (a, b) => a == null || b == null ? null : a - b;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const STATUS = {up: '상승', flat: '보합', down: '하락'};
+const ARROW = {up: '▲', flat: '–', down: '▼'};
+const MKT = {KOSPI: '코스피', KOSDAQ: '코스닥', INDEX: '지수'};
+const WD = '일월화수목금토';
+const wd = iso => WD[new Date(iso + 'T00:00:00').getDay()];
+
+let meta = null, view = 'report';
+let rCharts = [], cCharts = [], data = null;
+let fMarket = 'ALL', fStatus = 'ALL';
+let selected = [], cdata = null;
+
+/* ---------- 공통 ---------- */
+async function loadMeta() {
+  meta = await fetch('/api/weeks').then(r => r.json());
+  const t = meta.last_refresh ? new Date(meta.last_refresh).toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}) + ' (KST)' : '없음';
+  $('#meta').textContent = `대상 ${meta.universe}개사 · 마지막 갱신 ${t}${meta.refreshing ? ' · 갱신 중…' : ''}`;
+  fillPeriodSelects();
+  if (meta.range.min) {
+    for (const el of [$('#cstart'), $('#cend')]) { el.min = meta.range.min; el.max = meta.range.max; }
+    if (!$('#cstart').value) $('#cstart').value = meta.weeks.length ? meta.weeks.at(-1).monday : meta.range.min;
+    if (!$('#cend').value) $('#cend').value = meta.range.max;
+  }
+  if (!meta.universe) {
+    $('#content').innerHTML = `<div class="card warn"><h2>대상 기업 명단이 아직 없습니다</h2>
+      <p>data/companies.csv 에 KIND 저PBR 기업 명단(code,name,market)을 넣은 뒤 데이터를 갱신하세요.</p></div>`;
+    return false;
+  }
+  if (!meta.weeks.length) {
+    $('#content').innerHTML = meta.refreshing
+      ? '<div class="card empty">시세 데이터를 수집하는 중입니다(약 30초). 끝나면 자동으로 표시됩니다.</div>'
+      : '<div class="card empty">시세 데이터가 아직 없습니다. 데이터 갱신을 눌러 주세요.</div>';
+    if (meta.refreshing) setTimeout(async () => { if (await loadMeta()) loadReport(); }, 5000);
+    return false;
+  }
+  return true;
+}
+
+function baseOpts(yfmt) {
+  const grid = css('--border'), tick = css('--text-2');
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: { callbacks: {} } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: tick, maxRotation: 0, autoSkipPadding: 12 } },
+      y: { grid: { color: grid }, border: { display: false }, ticks: { color: tick, callback: yfmt } } }
+  };
+}
+const pctAxis = v => v + '%';
+
+/* ---------- 기간 보고서 ---------- */
+function fillPeriodSelects() {
+  const kind = $('#kind').value, pa = $('#pa'), pb = $('#pb');
+  const q = new URLSearchParams(location.search);
+  const prevA = pa.value || q.get('a'), prevB = pb.value || q.get('b');
+  const weekOpts = meta.weeks.map(w => `<option value="${w.monday}">${w.label} (${w.range})</option>`).join('');
+  if (kind === 'month') {
+    pa.innerHTML = meta.months.map(m => `<option value="${m.month}">${m.label}</option>`).join('');
+    $('#lbl-a-text').textContent = '월'; $('#lbl-b').style.display = 'none';
+  } else {
+    pa.innerHTML = weekOpts; pb.innerHTML = weekOpts;
+    $('#lbl-a-text').textContent = kind === 'weeks' ? '시작 주' : '주차';
+    $('#lbl-b').style.display = kind === 'weeks' ? '' : 'none';
+  }
+  if (prevA && [...pa.options].some(o => o.value === prevA)) pa.value = prevA;
+  if (kind === 'weeks') {
+    if (prevB && [...pb.options].some(o => o.value === prevB)) pb.value = prevB;
+    else pb.value = meta.weeks[0]?.monday;
+    if (!prevA || ![...pa.options].some(o => o.value === prevA)) pa.value = meta.weeks.at(-1)?.monday;
+  }
+}
+
+async function loadReport() {
+  const kind = $('#kind').value, a = $('#pa').value, b = $('#pb').value, band = $('#band').value;
+  const qs = `kind=${kind}&a=${a}${kind === 'weeks' ? `&b=${b}` : ''}&band=${band}`;
+  history.replaceState(null, '', `?${qs}`);
+  data = await fetch(`/api/report?${qs}`).then(r => r.json());
+  renderReport();
+}
+
+function renderReport() {
+  rCharts.forEach(c => c.destroy()); rCharts = [];
+  const d = data, s = d.summary, ix = d.indexes;
+  const kospi = ix.KOSPI.change?.pct, kosdaq = ix.KOSDAQ.change?.pct;
+  const days = d.week.trading_days;
+  if (!days.length) { $('#content').innerHTML = '<div class="card empty">선택한 기간에 거래일 데이터가 없습니다.</div>'; return; }
+  const period = `${md(days[0])}(${wd(days[0])}) ~ ${md(days.at(-1))}(${wd(days.at(-1))}) · ${days.length}거래일`;
+  const progress = d.week.complete ? '' : ` <span class="tag">진행 중${d.week.intraday ? ' · 오늘은 장중 시세' : ''}</span>`;
+  const better = d.overall.avg != null && kospi != null ? (d.overall.avg >= Math.max(kospi, kosdaq) ? '두 지수를 모두 웃돌았습니다'
+      : d.overall.avg >= Math.min(kospi, kosdaq) ? '한 지수만 웃돌았습니다' : '두 지수를 모두 밑돌았습니다') : '';
+  const headline = `${d.week.label} 저PBR ${d.total}개사 중 <b class="pos">${s.up.count}개사(${s.up.share.toFixed(1)}%) 상승</b>,
+    ${s.flat.count}개사(${s.flat.share.toFixed(1)}%) 보합, <b class="neg">${s.down.count}개사(${s.down.share.toFixed(1)}%) 하락</b>.
+    평균 등락률 ${fmtPct(d.overall.avg)}로 코스피(${fmtPct(kospi)})·코스닥(${fmtPct(kosdaq)}) 대비 ${better}.`;
+  const bm = m => d.by_market[m];
+  const all = allItems();
+  const gainers = all.filter(r => r.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 10);
+  const losers = all.filter(r => r.pct < 0).sort((a, b) => a.pct - b.pct).slice(0, 10);
+
+  $('#content').innerHTML = `
+  <div class="print-only" style="margin-bottom:8px"><b>보고 기간</b> ${d.week.label} · ${period} · 보합 ±${d.band}%</div>
+  <section class="card">
+    <div class="sub">${d.week.label} · ${period} · 보합 기준 ±${d.band}%${progress}</div>
+    <p class="headline">${headline}</p>
+    <div class="stackbar" role="img" aria-label="상승 ${s.up.count}, 보합 ${s.flat.count}, 하락 ${s.down.count}">
+      ${['up','flat','down'].filter(k => s[k].count).map(k => `<div style="flex:${s[k].count};background:var(--${k})" title="${STATUS[k]} ${s[k].count}개사"></div>`).join('')}
+    </div>
+    <div class="legend">${['up','flat','down'].map(k => `<span><i class="mark" style="background:var(--${k})"></i>${ARROW[k]} ${STATUS[k]} ${s[k].count}개사 (${s[k].share.toFixed(1)}%)</span>`).join('')}</div>
+  </section>
+
+  <section class="kpis">
+    ${kpi('상승 기업', `${s.up.count}개사`, `${s.up.share.toFixed(1)}% · 평균 ${fmtPct(s.up.avg)}`, 'pos')}
+    ${kpi('보합 기업', `${s.flat.count}개사`, `${s.flat.share.toFixed(1)}% · 평균 ${fmtPct(s.flat.avg)}`)}
+    ${kpi('하락 기업', `${s.down.count}개사`, `${s.down.share.toFixed(1)}% · 평균 ${fmtPct(s.down.avg)}`, 'neg')}
+    ${kpi('저PBR 평균 등락률', fmtPct(d.overall.avg), `중앙값 ${fmtPct(d.overall.median)}`, cls(d.overall.avg))}
+    ${kpi('코스피 / 코스닥', `<span class="${cls(kospi)}">${fmtPct(kospi)}</span> / <span class="${cls(kosdaq)}">${fmtPct(kosdaq)}</span>`, '같은 기간 시가→종가', 'sm')}
+    ${kpi('지수 초과 기업', `${d.overall.beat_count}개사`, `${d.overall.beat_share.toFixed(1)}% · 소속 시장 지수보다 상승`)}
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>일별 누적 등락률 (기간 첫 시가 대비 종가)</h2>
+      <div class="chartbox"><canvas id="trend"></canvas></div>
+      <div class="legend" style="margin-top:8px">
+        <span><i class="mark line" style="background:var(--s-lowpbr)"></i>저PBR 평균(동일가중)</span>
+        <span><i class="mark line" style="background:var(--s-kospi)"></i>코스피</span>
+        <span><i class="mark line" style="background:var(--s-kosdaq)"></i>코스닥</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>시장별 비교</h2>
+      <div class="tablewrap"><table>
+        <tr><th class="l">구분</th><th>기업 수</th><th>상승</th><th>보합</th><th>하락</th><th>평균</th><th>중앙값</th><th>지수</th><th>평균−지수</th></tr>
+        ${['KOSPI','KOSDAQ'].map(m => `<tr><td class="l">${MKT[m]} 상장</td><td>${bm(m).count}</td>
+          <td>${bm(m).up}</td><td>${bm(m).flat}</td><td>${bm(m).down}</td>
+          <td class="${cls(bm(m).avg)}">${fmtPct(bm(m).avg)}</td><td class="${cls(bm(m).median)}">${fmtPct(bm(m).median)}</td>
+          <td class="${cls(bm(m).index_pct)}">${fmtPct(bm(m).index_pct)}</td>
+          <td class="${cls(diff(bm(m).avg, bm(m).index_pct))}">${fmtPp(diff(bm(m).avg, bm(m).index_pct))}</td></tr>`).join('')}
+        <tr><td class="l"><b>전체</b></td><td>${d.total}</td><td>${s.up.count}</td><td>${s.flat.count}</td><td>${s.down.count}</td>
+          <td class="${cls(d.overall.avg)}"><b>${fmtPct(d.overall.avg)}</b></td><td class="${cls(d.overall.median)}">${fmtPct(d.overall.median)}</td><td></td><td></td></tr>
+      </table></div>
+      <h2 style="margin-top:16px">등락률 분포</h2>
+      <div class="chartbox" style="height:150px"><canvas id="hist"></canvas></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card"><h2>상승률 상위 10</h2>${miniTable(gainers)}</section>
+    <section class="card"><h2>하락률 상위 10</h2>${miniTable(losers)}</section>
+  </div>
+
+  <section class="card page-break splittable">
+    <h2>전체 기업 목록 <span class="sub" id="listcount"></span></h2>
+    <div class="filters noprint">
+      <span><span class="lbl">시장</span><span class="seg" id="f-market">
+        ${[['ALL','전체'],['KOSPI','코스피'],['KOSDAQ','코스닥']].map(([k, v]) => `<button data-v="${k}" class="${fMarket === k ? 'on' : ''}">${v}</button>`).join('')}</span></span>
+      <span><span class="lbl">등락</span><span class="seg" id="f-status">
+        ${[['ALL','전체'],['up','▲ 상승'],['flat','– 보합'],['down','▼ 하락']].map(([k, v]) => `<button data-v="${k}" class="${fStatus === k ? 'on' : ''}">${v}</button>`).join('')}</span></span>
+    </div>
+    <div class="print-only sub" id="listfilter"></div>
+    <div id="fulltable"></div>
+    <div class="sub noprint" style="margin-top:8px">행을 누르면 일별 시가·종가가 펼쳐집니다.</div>
+  </section>
+  ${d.missing.length ? `<section class="card warn"><h2>집계 제외 ${d.missing.length}개사 (해당 기간 거래 없음)</h2>
+    <p class="sub">거래정지 등으로 해당 기간 거래 데이터가 없음: ${d.missing.map(m => `${esc(m.name)}(${m.code})`).join(', ')}</p></section>` : ''}
+  `;
+
+  $$('#f-market button').forEach(b => b.onclick = () => { fMarket = b.dataset.v; segOn('#f-market', b); renderFullTable(); });
+  $$('#f-status button').forEach(b => b.onclick = () => { fStatus = b.dataset.v; segOn('#f-status', b); renderFullTable(); });
+  renderFullTable();
+  drawTrend(); drawHist(all);
+}
+
+const allItems = () => [...data.groups.up, ...data.groups.flat, ...data.groups.down];
+const segOn = (sel, b) => $$(sel + ' button').forEach(x => x.classList.toggle('on', x === b));
+const kpi = (label, value, note, c = '') => `<div class="kpi"><div class="label">${label}</div><div class="value ${c}">${value}</div><div class="note">${note}</div></div>`;
+
+function miniTable(rows) {
+  if (!rows.length) return '<div class="empty">해당 없음</div>';
+  return `<div class="tablewrap"><table><tr><th class="l">#</th><th class="l">기업</th><th class="l">시장</th><th>등락률</th><th>지수 대비</th></tr>
+    ${rows.map((r, i) => `<tr><td class="l">${i + 1}</td><td class="l">${esc(r.name)}</td><td class="l">${MKT[r.market] || r.market}</td>
+      <td class="${cls(r.pct)}">${fmtPct(r.pct)}</td><td class="${cls(r.excess)}">${fmtPp(r.excess)}</td></tr>`).join('')}</table></div>`;
+}
+
+function renderFullTable() {
+  const days = data.week.trading_days;
+  const rows = allItems().filter(r => (fMarket === 'ALL' || r.market === fMarket) && (fStatus === 'ALL' || r.status === fStatus))
+    .sort((a, b) => b.pct - a.pct);
+  const up = rows.filter(r => r.status === 'up').length, fl = rows.filter(r => r.status === 'flat').length, dn = rows.filter(r => r.status === 'down').length;
+  const avg = rows.length ? rows.reduce((a, r) => a + r.pct, 0) / rows.length : null;
+  $('#listcount').textContent = `· ${rows.length}개사 (상승 ${up} / 보합 ${fl} / 하락 ${dn}) · 평균 ${fmtPct(avg)}`;
+  $('#listfilter').textContent = `시장: ${{ALL:'전체',KOSPI:'코스피',KOSDAQ:'코스닥'}[fMarket]} · 등락: ${fStatus === 'ALL' ? '전체' : STATUS[fStatus]}`;
+  if (!rows.length) { $('#fulltable').innerHTML = '<div class="empty">해당 기업이 없습니다.</div>'; return; }
+  const showDays = days.length <= 5 ? days : [];
+  $('#fulltable').innerHTML = `<div class="tablewrap"><table>
+    <tr><th class="l">#</th><th class="l">기업</th><th class="l">코드</th><th class="l">시장</th><th class="l">구분</th><th>시가(${md(days[0])})</th><th>종가(${md(days.at(-1))})</th><th>등락률</th><th>지수 대비</th>
+      ${showDays.map(dd => `<th>${md(dd)} 종가</th>`).join('')}</tr>
+    ${rows.map((r, i) => `<tr class="row" data-code="${r.code}"><td class="l">${i + 1}</td><td class="l">${esc(r.name)}</td><td class="l">${r.code}</td>
+      <td class="l">${MKT[r.market] || r.market}</td><td class="l ${r.status === 'up' ? 'pos' : r.status === 'down' ? 'neg' : 'zero'}">${ARROW[r.status]} ${STATUS[r.status]}</td>
+      <td>${num(r.open)}</td><td>${num(r.close)}</td>
+      <td class="${cls(r.pct)}"><b>${fmtPct(r.pct)}</b></td><td class="${cls(r.excess)}">${fmtPp(r.excess)}</td>
+      ${showDays.map(dd => { const x = r.daily.find(q => q.date === dd); return `<td>${x && x.volume ? num(x.close) : '–'}</td>`; }).join('')}</tr>`).join('')}
+  </table></div>`;
+  $$('#fulltable tr.row').forEach(tr => tr.onclick = () => toggleDetail(tr));
+}
+
+function toggleDetail(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('detail')) { next.remove(); return; }
+  const c = allItems().find(r => r.code === tr.dataset.code), cols = tr.children.length;
+  const det = document.createElement('tr'); det.className = 'detail';
+  det.innerHTML = `<td colspan="${cols}"><div class="grid2">
+    <div class="tablewrap">${dailyTable(c.daily)}</div>
+    <div><div class="chartbox" style="height:200px"><canvas></canvas></div>
+      <div class="legend"><span><i class="mark line" style="background:var(--c2)"></i>시가</span><span><i class="mark line" style="background:var(--c1)"></i>종가</span></div></div></div></td>`;
+  tr.after(det);
+  rCharts.push(priceChart(det.querySelector('canvas'), c.daily));
+}
+
+function dailyTable(daily) {
+  return `<table><tr><th class="l">일자</th><th>시가</th><th>고가</th><th>저가</th><th>종가</th><th>시가→종가</th><th>거래량</th></tr>
+    ${daily.map(q => { const it = q.open ? (q.close / q.open - 1) * 100 : null;
+      return `<tr><td class="l">${md(q.date)}(${wd(q.date)})</td><td>${num(q.open)}</td><td>${num(q.high)}</td><td>${num(q.low)}</td><td>${num(q.close)}</td>
+        <td class="${cls(it)}">${fmtPct(it)}</td><td>${num(q.volume)}</td></tr>`; }).join('')}</table>`;
+}
+
+function priceChart(canvas, daily) {
+  const o = baseOpts(v => v.toLocaleString('ko-KR'));
+  return new Chart(canvas, { type: 'line',
+    data: { labels: daily.map(q => md(q.date)), datasets: [
+      { label: '시가', data: daily.map(q => q.open || null), borderColor: css('--c2'), backgroundColor: css('--c2'), borderWidth: 2, pointRadius: 3, borderDash: [4, 3] },
+      { label: '종가', data: daily.map(q => q.close || null), borderColor: css('--c1'), backgroundColor: css('--c1'), borderWidth: 2, pointRadius: 3 } ] },
+    options: o });
+}
+
+function drawTrend() {
+  const t = data.trend;
+  const o = baseOpts(pctAxis);
+  o.plugins.tooltip.callbacks.label = ctx => `${ctx.dataset.label}: ${fmtPct(ctx.parsed.y)}`;
+  const pr = t.length > 12 ? 2 : 4;
+  rCharts.push(new Chart($('#trend'), { type: 'line',
+    data: { labels: t.map(p => md(p.date)), datasets: [
+      { label: '저PBR 평균', data: t.map(p => p.lowpbr), borderColor: css('--s-lowpbr'), backgroundColor: css('--s-lowpbr'), borderWidth: 2.5, pointRadius: pr },
+      { label: '코스피', data: t.map(p => p.KOSPI), borderColor: css('--s-kospi'), backgroundColor: css('--s-kospi'), borderWidth: 2, pointRadius: pr },
+      { label: '코스닥', data: t.map(p => p.KOSDAQ), borderColor: css('--s-kosdaq'), backgroundColor: css('--s-kosdaq'), borderWidth: 2, pointRadius: pr } ] },
+    options: o }));
+}
+
+function drawHist(all) {
+  const band = data.band;
+  const edges = [-Infinity, -10, -5, -3, -1, -band, band, 1, 3, 5, 10, Infinity];
+  const labels = ['≤-10', '-10~-5', '-5~-3', '-3~-1', `-1~-${band}`, `±${band}`, `${band}~1`, '1~3', '3~5', '5~10', '≥10'];
+  const counts = labels.map((_, i) => all.filter(r => r.pct >= edges[i] && r.pct < edges[i + 1]).length);
+  const colors = labels.map((_, i) => i < 5 ? css('--down') : i === 5 ? css('--flat') : css('--up'));
+  const o = baseOpts();
+  o.interaction = { mode: 'nearest', intersect: true };
+  o.plugins.tooltip.callbacks.label = ctx => `${ctx.parsed.y}개사`;
+  o.scales.y.ticks.precision = 0;
+  o.scales.x.ticks.font = { size: 10 }; o.scales.x.ticks.autoSkip = false;
+  rCharts.push(new Chart($('#hist'), { type: 'bar',
+    data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom' }] },
+    options: o }));
+}
+
+/* ---------- 기업 비교 ---------- */
+function cell(s, dt) {
+  const q = s.daily.find(x => x.date === dt);
+  if (!q || !q.volume) return '<td>–</td><td>–</td>';
+  return `<td>${num(q.open)}</td><td class="${cls(q.close - q.open)}">${num(q.close)}</td>`;
+}
+const MAX_SEL = 8;
+const slotColor = i => css(`--c${(i % 8) + 1}`);
+
+function renderChips() {
+  $('#chips').innerHTML = selected.map((code, i) => {
+    const c = meta.companies.find(x => x.code === code);
+    return `<span class="chip"><i class="mark" style="background:var(--c${i + 1})"></i>${esc(c ? c.name : code)}<button data-code="${code}" aria-label="제거">×</button></span>`;
+  }).join('') + (selected.length ? `<button id="clearsel" class="noprint" style="padding:3px 10px">모두 지우기</button>` : '');
+  $$('#chips .chip button').forEach(b => b.onclick = () => { selected = selected.filter(x => x !== b.dataset.code); syncCompare(); });
+  if ($('#clearsel')) $('#clearsel').onclick = () => { selected = []; syncCompare(); };
+}
+
+function syncCompare() {
+  renderChips();
+  const q = new URLSearchParams(location.search);
+  q.set('view', 'compare'); q.set('codes', selected.join(',')); q.set('start', $('#cstart').value); q.set('end', $('#cend').value);
+  history.replaceState(null, '', '?' + q.toString());
+  loadCompare();
+}
+
+function setupSearch() {
+  const inp = $('#search'), box = $('#suggest');
+  let hi = 0, list = [];
+  const show = () => {
+    const t = inp.value.trim().toLowerCase();
+    if (!t) { box.style.display = 'none'; return; }
+    const rank = c => { const n = c.name.toLowerCase(); return n === t || c.code === t ? 0 : n.startsWith(t) || c.code.startsWith(t) ? 1 : 2; };
+    list = meta.companies.filter(c => !selected.includes(c.code) && (c.name.toLowerCase().includes(t) || c.code.includes(t)))
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ko')).slice(0, 30);
+    hi = 0;
+    box.innerHTML = list.length ? list.map((c, i) => `<div data-code="${c.code}" class="${i === 0 ? 'hi' : ''}">${esc(c.name)} <span class="sub">${c.code} · ${MKT[c.market] || ''}</span></div>`).join('')
+      : '<div class="sub">일치하는 기업이 없습니다</div>';
+    box.style.display = 'block';
+    $$('#suggest div[data-code]').forEach(d => d.onmousedown = e => { e.preventDefault(); add(d.dataset.code); });
+  };
+  const add = code => {
+    if (selected.length >= MAX_SEL) { alert(`최대 ${MAX_SEL}개사까지 비교할 수 있습니다.`); return; }
+    selected.push(code); inp.value = ''; box.style.display = 'none'; syncCompare();
+  };
+  inp.oninput = show;
+  inp.onfocus = show;
+  inp.onblur = () => setTimeout(() => box.style.display = 'none', 100);
+  inp.onkeydown = e => {
+    const items = $$('#suggest div[data-code]');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach((d, i) => d.classList.toggle('hi', i === hi));
+    } else if (e.key === 'Enter' && items[hi]) { e.preventDefault(); add(items[hi].dataset.code); }
+  };
+}
+
+async function loadCompare() {
+  cCharts.forEach(c => c.destroy()); cCharts = [];
+  if (!selected.length) {
+    $('#ccontent').innerHTML = '<div class="card empty">비교할 기업을 검색해서 추가하세요. 최대 8개사까지 선택할 수 있습니다.</div>';
+    return;
+  }
+  cdata = await fetch(`/api/compare?codes=${selected.join(',')}&start=${$('#cstart').value}&end=${$('#cend').value}`).then(r => r.json());
+  renderCompare();
+}
+
+function renderCompare() {
+  cCharts.forEach(c => c.destroy()); cCharts = [];
+  const d = cdata, withIdx = $('#cindex').checked;
+  if (d.error || !d.dates.length) { $('#ccontent').innerHTML = `<div class="card empty">${d.error || '선택한 기간에 거래일 데이터가 없습니다.'}</div>`; return; }
+  const cos = d.series.filter(s => !s.is_index);
+  const idx = d.series.filter(s => s.is_index);
+  const idxPct = m => idx.find(s => s.code === m)?.change?.pct;
+  const period = `${md(d.dates[0])}(${wd(d.dates[0])}) ~ ${md(d.dates.at(-1))}(${wd(d.dates.at(-1))}) · ${d.dates.length}거래일`;
+  const ranked = [...cos].filter(s => s.change).sort((a, b) => b.change.pct - a.change.pct);
+  const best = ranked[0], worst = ranked.at(-1);
+  const dateHead = d.dates.map(dt => `<th colspan="2">${md(dt)}(${wd(dt)})</th>`).join('');
+  $('#ccontent').innerHTML = `
+  <div class="print-only" style="margin-bottom:8px"><b>기업 비교</b> · ${period}</div>
+  <section class="card">
+    <div class="sub">기업 비교 · ${period}</div>
+    <p class="headline">${cos.length}개사 비교 · ${best ? `최고 <b>${esc(best.name)}</b> <span class="${cls(best.change.pct)}">${fmtPct(best.change.pct)}</span>` : ''}${worst && worst !== best ? `, 최저 <b>${esc(worst.name)}</b> <span class="${cls(worst.change.pct)}">${fmtPct(worst.change.pct)}</span>` : ''}
+      · 같은 기간 코스피 <span class="${cls(idxPct('KOSPI'))}">${fmtPct(idxPct('KOSPI'))}</span>, 코스닥 <span class="${cls(idxPct('KOSDAQ'))}">${fmtPct(idxPct('KOSDAQ'))}</span></p>
+  </section>
+  <section class="card">
+    <h2>누적 등락률 추이 (기간 첫 시가 대비 각 날 종가)</h2>
+    <div class="chartbox tall"><canvas id="cmp"></canvas></div>
+    <div class="legend" style="margin-top:8px">
+      ${cos.map(s => `<span><i class="mark line" style="background:var(--c${selected.indexOf(s.code) + 1})"></i>${esc(s.name)}</span>`).join('')}
+      ${withIdx ? `<span><i class="mark line" style="background:var(--muted)"></i>코스피(점선)</span><span><i class="mark line" style="background:var(--text-2)"></i>코스닥(짧은 점선)</span>` : ''}
+    </div>
+  </section>
+  <section class="card">
+    <h2>기간 요약</h2>
+    <div class="tablewrap"><table>
+      <tr><th class="l">기업</th><th class="l">코드</th><th class="l">시장</th><th>시작 시가</th><th>종료 종가</th><th>기간 등락률</th><th>기간 최고</th><th>기간 최저</th><th>지수 대비</th></tr>
+      ${cos.map(s => { const ch = s.change, b = ch ? idxPct(s.market) : null;
+        return `<tr><td class="l"><i class="mark" style="background:var(--c${selected.indexOf(s.code) + 1})"></i>${esc(s.name)}</td><td class="l">${s.code}</td><td class="l">${MKT[s.market] || ''}</td>
+        <td>${ch ? num(ch.open) : '–'}</td><td>${ch ? num(ch.close) : '–'}</td><td class="${cls(ch?.pct)}"><b>${ch ? fmtPct(ch.pct) : '거래 없음'}</b></td>
+        <td>${num(s.high)}</td><td>${num(s.low)}</td><td class="${cls(diff(ch?.pct, b))}">${fmtPp(diff(ch?.pct, b))}</td></tr>`; }).join('')}
+      ${withIdx ? idx.map(s => `<tr><td class="l">${s.name}</td><td class="l">지수</td><td class="l"></td><td>${s.change ? num(s.change.open) : '–'}</td><td>${s.change ? num(s.change.close) : '–'}</td>
+        <td class="${cls(s.change?.pct)}">${fmtPct(s.change?.pct)}</td><td>${num(s.high)}</td><td>${num(s.low)}</td><td></td></tr>`).join('') : ''}
+    </table></div>
+  </section>
+  <section class="card splittable">
+    <h2>일별 시가·종가</h2>
+    <div class="tablewrap">${d.dates.length <= 7 ? `<table>
+      <tr><th class="l" rowspan="2">기업</th>${dateHead}</tr>
+      <tr>${d.dates.map(() => '<th>시가</th><th>종가</th>').join('')}</tr>
+      ${cos.map(s => `<tr><td class="l">${esc(s.name)}</td>${d.dates.map(dt => cell(s, dt)).join('')}</tr>`).join('')}
+    </table>` : `<table>
+      <tr><th class="l" rowspan="2">일자</th>${cos.map(s => `<th colspan="2">${esc(s.name)}</th>`).join('')}</tr>
+      <tr>${cos.map(() => '<th>시가</th><th>종가</th>').join('')}</tr>
+      ${d.dates.map(dt => `<tr><td class="l">${md(dt)}(${wd(dt)})</td>${cos.map(s => cell(s, dt)).join('')}</tr>`).join('')}
+    </table>`}</div>
+    <div class="sub" style="margin-top:6px">종가 색: 그날 시가보다 높으면 빨강, 낮으면 파랑. "–"는 거래 없음(거래정지 등).</div>
+  </section>`;
+
+  const o = baseOpts(pctAxis);
+  o.plugins.tooltip.callbacks.label = ctx => `${ctx.dataset.label}: ${fmtPct(ctx.parsed.y)}`;
+  const pr = d.dates.length > 15 ? 2 : 4;
+  const sets = cos.map(s => { const col = slotColor(selected.indexOf(s.code));
+    return { label: s.name, data: d.dates.map(dt => s.cum[dt] ?? null), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: pr, spanGaps: true }; });
+  if (withIdx) idx.forEach((s, i) => sets.push({ label: s.name, data: d.dates.map(dt => s.cum[dt] ?? null),
+    borderColor: i === 0 ? css('--muted') : css('--text-2'), backgroundColor: i === 0 ? css('--muted') : css('--text-2'),
+    borderWidth: 2, borderDash: i === 0 ? [6, 4] : [2, 3], pointRadius: 0 }));
+  cCharts.push(new Chart($('#cmp'), { type: 'line', data: { labels: d.dates.map(md), datasets: sets }, options: o }));
+}
+
+/* ---------- PDF 다운로드 ---------- */
+let libsLoaded = null;
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+const loadLibs = () => libsLoaded ||= Promise.all([loadScript('/static/html2canvas.min.js'), loadScript('/static/jspdf.umd.min.js')]);
+
+async function downloadPdf(btn, filename) {
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
+  const root = document.documentElement, prevTheme = root.dataset.theme;
+  try {
+    await loadLibs();
+    root.dataset.theme = 'light';
+    root.classList.add('pdfmode');
+    $$('tr.detail').forEach(t => t.remove());
+    if (view === 'report') renderReport(); else renderCompare();   // 밝은 색·고정 폭으로 다시 그림
+    window.scrollTo(0, 0);
+    await new Promise(r => setTimeout(r, 250));
+    const el = $('#wrap'), top = el.getBoundingClientRect().top + window.scrollY;
+    // 쪽 나눔 후보: 카드·표 행·KPI 줄의 아래 경계 (보이는 요소만)
+    const breaks = [...new Set($$('#wrap .card, #wrap tr, #wrap .kpis, #wrap .grid2, #wrap .print-only')
+      .filter(n => n.offsetParent !== null)
+      .map(n => Math.round(n.getBoundingClientRect().bottom + window.scrollY - top)))].sort((x, y) => x - y);
+    const scale = 2;
+    const canvas = await html2canvas(el, { scale, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      windowWidth: el.scrollWidth, scrollX: 0, scrollY: -window.scrollY });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const margin = 10, pw = 210 - margin * 2, ph = 297 - margin * 2 - 6;
+    const pxPerMm = canvas.width / scale / pw;
+    const pageH = ph * pxPerMm;
+    const total = canvas.height / scale;
+    let y = 0, page = 0;
+    while (y < total - 2) {
+      let end = Math.min(y + pageH, total);
+      if (end < total) {
+        const cand = breaks.filter(b => b > y + pageH * 0.35 && b <= y + pageH);
+        if (cand.length) end = cand.at(-1) + 2;
+      }
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = Math.ceil((end - y) * scale);
+      const ctx = slice.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, slice.width, slice.height);
+      ctx.drawImage(canvas, 0, Math.floor(y * scale), canvas.width, slice.height, 0, 0, canvas.width, slice.height);
+      if (page) pdf.addPage();
+      pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, pw, (end - y) / pxPerMm);
+      page++; y = end;
+    }
+    const n = pdf.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(140); pdf.text(`${i} / ${n}`, 210 - margin, 297 - 5, { align: 'right' }); }
+    pdf.save(filename);
+  } catch (e) {
+    console.error(e);
+    alert('PDF 생성에 실패했습니다. 인쇄 버튼에서 "PDF로 저장"을 이용해 주세요.');
+  } finally {
+    root.classList.remove('pdfmode');
+    if (prevTheme) root.dataset.theme = prevTheme; else delete root.dataset.theme;
+    if (view === 'report') renderReport(); else renderCompare();
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+const safe = s => s.replace(/[\\/:*?"<>|~ ]+/g, '_');
+$('#pdf-report').onclick = () => data && downloadPdf($('#pdf-report'), safe(`저PBR_기간보고서_${data.week.label}_보합${data.band}.pdf`));
+$('#pdf-compare').onclick = () => cdata && !cdata.error && downloadPdf($('#pdf-compare'), safe(`저PBR_기업비교_${cdata.dates[0] || ''}_${cdata.dates.at(-1) || ''}.pdf`));
+
+// 인쇄 시 차트를 이미지로 바꿔 용지 폭에 맞게 축소
+window.addEventListener('beforeprint', () => {
+  $$('img.printimg').forEach(i => i.remove());
+  [...rCharts, ...cCharts].forEach(c => { const img = new Image(); img.className = 'printimg'; img.src = c.toBase64Image(); c.canvas.after(img); });
+});
+window.addEventListener('afterprint', () => $$('img.printimg').forEach(i => i.remove()));
+
+/* ---------- 이벤트 ---------- */
+function setView(v) {
+  view = v;
+  $$('.viewtabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $('#view-report').style.display = v === 'report' ? '' : 'none';
+  $('#view-compare').style.display = v === 'compare' ? '' : 'none';
+  $('#title').textContent = v === 'report' ? '저PBR 기업 주가 동향' : '저PBR 기업 주가 비교';
+  if (v === 'compare') { renderChips(); loadCompare(); }
+  else if (data) { history.replaceState(null, '', location.pathname); loadReport(); }
+}
+$$('.viewtabs button').forEach(b => b.onclick = () => setView(b.dataset.view));
+$('#kind').onchange = () => { $('#pa').value = ''; fillPeriodSelects(); loadReport(); };
+$('#pa').onchange = loadReport;
+$('#pb').onchange = loadReport;
+$('#band').onchange = loadReport;
+$('#cstart').onchange = syncCompare;
+$('#cend').onchange = syncCompare;
+$('#cindex').onchange = () => cdata && renderCompare();
+$('#refresh').onclick = async () => {
+  $('#refresh').disabled = true; $('#refresh').textContent = '갱신 중…';
+  await fetch('/api/refresh', { method: 'POST' });
+  const poll = setInterval(async () => {
+    const r = await fetch('/api/weeks').then(r => r.json());
+    if (!r.refreshing) { clearInterval(poll); $('#refresh').disabled = false; $('#refresh').textContent = '데이터 갱신';
+      if (await loadMeta()) { loadReport(); if (view === 'compare') loadCompare(); } }
+  }, 3000);
+};
+
+(async () => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('kind')) $('#kind').value = q.get('kind');
+  if (q.get('band')) $('#band').value = q.get('band');
+  if (q.get('start')) $('#cstart').value = q.get('start');
+  if (q.get('end')) $('#cend').value = q.get('end');
+  const ok = await loadMeta();
+  setupSearch();
+  if (q.get('codes')) selected = q.get('codes').split(',').filter(c => meta.companies.some(x => x.code === c)).slice(0, MAX_SEL);
+  if (ok) await loadReport();
+  if (q.get('view') === 'compare') setView('compare');
+})();
+</script>
+</body>
+</html>

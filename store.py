@@ -1,0 +1,60 @@
+"""SQLite 저장소와 회사 명단 로딩."""
+import csv
+import os
+import sqlite3
+from contextlib import contextmanager
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "prices.db"))
+COMPANIES_CSV = os.environ.get("COMPANIES_CSV", os.path.join(BASE_DIR, "data", "companies.csv"))
+INDEXES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
+
+
+@contextmanager
+def connect():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS prices (
+                code TEXT NOT NULL, date TEXT NOT NULL,
+                open REAL, high REAL, low REAL, close REAL, volume REAL,
+                PRIMARY KEY (code, date));
+            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+            """
+        )
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_companies():
+    """data/companies.csv (code,name,market) 를 읽는다. 없으면 빈 목록."""
+    if not os.path.exists(COMPANIES_CSV):
+        return []
+    rows = []
+    with open(COMPANIES_CSV, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            code = (r.get("code") or "").strip()
+            if not code or code.startswith("#"):
+                continue
+            rows.append({
+                "code": code.zfill(6),
+                "name": (r.get("name") or "").strip(),
+                "market": (r.get("market") or "").strip().upper(),
+            })
+    return rows
+
+
+def get_meta(key, default=None):
+    with connect() as c:
+        row = c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_meta(key, value):
+    with connect() as c:
+        c.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, str(value)))
