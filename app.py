@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request, send_from_directory
 
+import build_info
 import refresh
 import report
 import store
@@ -14,6 +15,8 @@ import store
 KST = ZoneInfo("Asia/Seoul")
 app = Flask(__name__)
 _lock = threading.Lock()
+BUILD = build_info.load()
+print('[app] build', BUILD, flush=True)
 
 
 def last_expected_close(now=None):
@@ -31,6 +34,8 @@ def is_stale():
     last = store.get_meta("last_refresh")
     if not last:
         return True
+    if store.get_meta("last_refresh_ok", "1") == "0":   # 지난번에 하나도 못 받았으면 10분마다 재시도
+        return True
     return dt.datetime.fromisoformat(last) < last_expected_close()
 
 
@@ -41,6 +46,9 @@ def refresh_async():
     def job():
         try:
             refresh.run()
+        except Exception as e:
+            print("[refresh] 실패:", repr(e), flush=True)
+            store.set_meta("last_refresh_errors", f"전체 실패: {e!r}")
         finally:
             _lock.release()
     threading.Thread(target=job, daemon=True).start()
@@ -76,7 +84,11 @@ def weeks():
         "companies": store.load_companies(),
         "universe": len(store.load_companies()),
         "last_refresh": store.get_meta("last_refresh"),
+        "last_refresh_ok": int(store.get_meta("last_refresh_ok", "0") or 0),
+        "last_refresh_errors": (store.get_meta("last_refresh_errors") or "").splitlines()[:5],
         "refreshing": _lock.locked(),
+        "progress": dict(refresh.PROGRESS),
+        "build": BUILD,
     })
 
 

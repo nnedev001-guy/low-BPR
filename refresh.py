@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import store
 
 KST = ZoneInfo("Asia/Seoul")
+PROGRESS = {"done": 0, "total": 0, "errors": 0}   # 웹 화면 진행률 표시용
 START_DATE = "20261026"   # 11월 1주 직전 주부터 보관
 FCHART = "https://fchart.stock.naver.com/sise.nhn?symbol={sym}&timeframe=day&count={n}&requestType=0"
 ITEM_RE = re.compile(r'<item data="([^"]+)"')
@@ -22,15 +23,15 @@ NAME_RE = re.compile(r'<chartdata[^>]*name="([^"]*)"')
 def fetch(symbol, count):
     url = FCHART.format(sym=symbol, n=count)
     req = urllib.request.Request(url, headers={"User-Agent": "lowpbr-dashboard/1.0"})
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            with urllib.request.urlopen(req, timeout=20) as r:
+            with urllib.request.urlopen(req, timeout=10) as r:
                 text = r.read().decode("euc-kr", errors="replace")
             break
         except Exception:
-            if attempt == 2:
+            if attempt == 1:
                 raise
-            time.sleep(2 * (attempt + 1))
+            time.sleep(2)
     name = NAME_RE.search(text)  # 이름은 참고용
     rows = []
     for raw in ITEM_RE.findall(text):
@@ -52,11 +53,27 @@ def run(verbose=True):
     symbols = list(store.INDEXES) + [c["code"] for c in companies]
     errors, ok = [], 0
 
+    PROGRESS.update(done=0, total=len(symbols), errors=0)
+    print(f"[refresh] 시작: {len(symbols)}개 종목", flush=True)
+    # 시세 서버에 먼저 한 번 접속해 보고, 안 되면 151개를 다 기다리지 않고 바로 중단
+    try:
+        fetch("KOSPI", 5)
+    except Exception as e:
+        msg = f"시세 서버(fchart.stock.naver.com) 접속 실패: {type(e).__name__}: {e}"
+        print("[refresh]", msg, flush=True)
+        store.set_meta("last_refresh", dt.datetime.now(KST).isoformat(timespec="seconds"))
+        store.set_meta("last_refresh_ok", 0)
+        store.set_meta("last_refresh_errors", msg)
+        return 0, [msg]
+
     def one(sym):
         try:
-            return sym, fetch(sym, n)[1], None
+            res = sym, fetch(sym, n)[1], None
         except Exception as e:  # 네트워크 오류 등
-            return sym, None, str(e)
+            res = sym, None, f"{type(e).__name__}: {e}"
+            PROGRESS["errors"] += 1
+        PROGRESS["done"] += 1
+        return res
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(one, symbols))
@@ -73,10 +90,11 @@ def run(verbose=True):
     now = dt.datetime.now(KST).isoformat(timespec="seconds")
     store.set_meta("last_refresh", now)
     store.set_meta("last_refresh_errors", "\n".join(errors))
+    store.set_meta("last_refresh_ok", ok)
     if verbose:
-        print(f"[{now}] 갱신 완료: {ok}/{len(symbols)} 종목, 오류 {len(errors)}건")
-        for e in errors:
-            print("  -", e)
+        print(f"[{now}] 갱신 완료: {ok}/{len(symbols)} 종목, 오류 {len(errors)}건", flush=True)
+        for e in errors[:10]:
+            print("  -", e, flush=True)
     return ok, errors
 
 

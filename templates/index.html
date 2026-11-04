@@ -42,7 +42,8 @@ body { margin: 0; background: var(--bg); color: var(--text);
   font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 60px; }
 header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
-h1 { font-size: 22px; margin: 0; }
+h1 { font-size: 22px; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.build { font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
 .sub { color: var(--text-2); font-size: 13px; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .controlbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--surface);
@@ -142,7 +143,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
 <div class="wrap" id="wrap">
   <header class="top">
     <div>
-      <h1 id="title">저PBR 기업 주가 동향</h1>
+      <h1><span id="title">저PBR 기업 주가 동향</span> <span class="build" id="build"></span></h1>
       <div class="sub" id="meta">KIND 공표 저PBR 기업 · 불러오는 중…</div>
     </div>
     <div class="controls">
@@ -222,8 +223,38 @@ let fMarket = 'ALL', fStatus = 'ALL';
 let selected = [], cdata = null;
 
 /* ---------- 공통 ---------- */
+async function getJSON(url, ms = 30000) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error(`서버 응답 ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? '서버 응답 시간 초과' : e.message);
+  } finally { clearTimeout(t); }
+}
+
+function showError(msg, retry) {
+  $('#content').innerHTML = `<div class="card warn"><h2>데이터를 불러오지 못했습니다</h2>
+    <p class="sub">${esc(msg)}</p><button id="retry">다시 시도</button></div>`;
+  $('#retry').onclick = retry;
+}
+
+function showBuild(b) {
+  if (!b) return;
+  const d = b.built_at ? new Date(b.built_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  $('#build').textContent = `Build ${b.number}${d ? ' · ' + d : ''}`;
+  $('#build').title = `커밋 ${b.commit || '-'} · 빌드 ${b.built_at || '-'}`;
+}
+
+async function boot() {
+  try { if (await loadMeta()) await loadReport(); }
+  catch (e) { showError(e.message, boot); setTimeout(() => { if ($('#retry')) boot(); }, 15000); }
+}
+
 async function loadMeta() {
-  meta = await fetch('/api/weeks').then(r => r.json());
+  meta = await getJSON('/api/weeks');
+  showBuild(meta.build);
   const t = meta.last_refresh ? new Date(meta.last_refresh).toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}) + ' (KST)' : '없음';
   $('#meta').textContent = `대상 ${meta.universe}개사 · 마지막 갱신 ${t}${meta.refreshing ? ' · 갱신 중…' : ''}`;
   fillPeriodSelects();
@@ -238,10 +269,14 @@ async function loadMeta() {
     return false;
   }
   if (!meta.weeks.length) {
+    const pg = meta.progress || {};
+    const errs = (meta.last_refresh_errors || []).map(esc).join('<br>');
     $('#content').innerHTML = meta.refreshing
-      ? '<div class="card empty">시세 데이터를 수집하는 중입니다(약 30초). 끝나면 자동으로 표시됩니다.</div>'
-      : '<div class="card empty">시세 데이터가 아직 없습니다. 데이터 갱신을 눌러 주세요.</div>';
-    if (meta.refreshing) setTimeout(async () => { if (await loadMeta()) loadReport(); }, 5000);
+      ? `<div class="card empty">시세 데이터를 수집하는 중입니다${pg.total ? ` (${pg.done}/${pg.total}${pg.errors ? `, 오류 ${pg.errors}` : ''})` : ''}. 끝나면 자동으로 표시됩니다.</div>`
+      : `<div class="card warn"><h2>시세 데이터가 아직 없습니다</h2>
+          ${meta.last_refresh ? `<p class="sub">마지막 수집 시도에서 시세를 받지 못했습니다(성공 ${meta.last_refresh_ok}개). 시세 서버(네이버) 접속 문제일 수 있습니다.</p><p class="sub">${errs}</p>` : ''}
+          <p class="sub">상단의 데이터 갱신을 눌러 다시 시도하세요.</p></div>`;
+    if (meta.refreshing) setTimeout(boot, 4000);
     return false;
   }
   return true;
@@ -286,7 +321,7 @@ async function loadReport() {
   const kind = $('#kind').value, a = $('#pa').value, b = $('#pb').value, band = $('#band').value;
   const qs = `kind=${kind}&a=${a}${kind === 'weeks' ? `&b=${b}` : ''}&band=${band}`;
   history.replaceState(null, '', `?${qs}`);
-  data = await fetch(`/api/report?${qs}`).then(r => r.json());
+  data = await getJSON(`/api/report?${qs}`);
   renderReport();
 }
 
@@ -694,7 +729,8 @@ $('#refresh').onclick = async () => {
   $('#refresh').disabled = true; $('#refresh').textContent = '갱신 중…';
   await fetch('/api/refresh', { method: 'POST' });
   const poll = setInterval(async () => {
-    const r = await fetch('/api/weeks').then(r => r.json());
+    let r; try { r = await getJSON('/api/weeks', 15000); } catch (e) { return; }
+    if (r.refreshing && r.progress?.total) $('#refresh').textContent = `갱신 중… ${r.progress.done}/${r.progress.total}`;
     if (!r.refreshing) { clearInterval(poll); $('#refresh').disabled = false; $('#refresh').textContent = '데이터 갱신';
       if (await loadMeta()) { loadReport(); if (view === 'compare') loadCompare(); } }
   }, 3000);
@@ -706,7 +742,9 @@ $('#refresh').onclick = async () => {
   if (q.get('band')) $('#band').value = q.get('band');
   if (q.get('start')) $('#cstart').value = q.get('start');
   if (q.get('end')) $('#cend').value = q.get('end');
-  const ok = await loadMeta();
+  let ok = false;
+  try { ok = await loadMeta(); }
+  catch (e) { showError(e.message, boot); setTimeout(() => { if ($('#retry')) boot(); }, 15000); return; }
   setupSearch();
   if (q.get('codes')) selected = q.get('codes').split(',').filter(c => meta.companies.some(x => x.code === c)).slice(0, MAX_SEL);
   if (ok) await loadReport();
