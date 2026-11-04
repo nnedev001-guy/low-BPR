@@ -10,21 +10,24 @@ COMPANIES_CSV = os.environ.get("COMPANIES_CSV", os.path.join(BASE_DIR, "data", "
 INDEXES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
 
 
+_schema_ready = False
+
+
 @contextmanager
 def connect():
+    """SQLite 연결. 스키마는 프로세스당 한 번만 만든다.
+    잠금 대기는 10초로 제한해, 문제가 있으면 요청이 무한정 멈추지 않고 오류로 끝나게 한다."""
+    global _schema_ready
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     try:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS prices (
-                code TEXT NOT NULL, date TEXT NOT NULL,
-                open REAL, high REAL, low REAL, close REAL, volume REAL,
-                PRIMARY KEY (code, date));
-            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
-            """
-        )
+        if not _schema_ready:
+            conn.execute("CREATE TABLE IF NOT EXISTS prices (code TEXT NOT NULL, date TEXT NOT NULL, "
+                         "open REAL, high REAL, low REAL, close REAL, volume REAL, PRIMARY KEY (code, date))")
+            conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+            _schema_ready = True
         yield conn
         conn.commit()
     finally:
