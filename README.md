@@ -19,7 +19,8 @@
 ## 구성
 | 파일 | 역할 |
 |---|---|
-| `data/companies.csv` | 대상 기업 명단 (`code,name,market`, market = KOSPI/KOSDAQ). 매년 5월·11월 명단 변경 시 교체 |
+| `data/lists/<공표일>.csv` | 대상 기업 명단 이력 (`code,name,market,...`). 공표일부터 다음 명단 공표 전날까지 적용. 기존 파일은 지우지 않음 |
+| `tools/import_kind_list.py` | KIND 저PBR 엑셀 → `data/lists/<공표일>.csv` 변환 + 직전 명단 대비 편입·제외 출력 |
 | `refresh.py` | 명단 + 코스피/코스닥 일봉을 받아 `data/prices.db`(SQLite)에 저장 |
 | `report.py` | 주차별 통계 계산 |
 | `app.py` | Flask 웹 서버. 평일 16:30(KST) 이후 하루 한 번 자동 갱신(내장 스케줄러) |
@@ -42,5 +43,14 @@ python app.py              # http://localhost:8000
 
 ## 환경 변수 (선택)
 - `DB_PATH`: SQLite 경로 (기본 `data/prices.db`)
-- `COMPANIES_CSV`: 명단 경로 (기본 `data/companies.csv`)
+- `LISTS_DIR`: 명단 이력 폴더 (기본 `data/lists`)
 - `DISABLE_SCHEDULER=1`: 내장 자동 갱신 끄기 (외부 cron 으로 `python refresh.py` 실행 시)
+
+## 명단 갱신 (매년 5월·11월 첫 거래일)
+KIND는 클라우드 서버 접속을 막아 자동 수집이 안 되므로, KIND에서 시장구분 "전체"로 엑셀을 내려받아 변환합니다.
+```bash
+python tools/import_kind_list.py 저PBR기업.xls --dry-run   # 편입·제외 확인
+python tools/import_kind_list.py 저PBR기업.xls             # data/lists/<공표일>.csv 생성
+```
+- 기간 보고서는 **기간 시작일에 적용되던 명단**으로 집계합니다. 기간 중 새 명단이 공표되면 화면에 안내합니다.
+- 시세는 모든 명단의 기업을 계속 수집하므로 과거 기간 보고서도 그대로 볼 수 있습니다.

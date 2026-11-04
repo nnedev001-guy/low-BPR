@@ -16,7 +16,8 @@ from contextlib import contextmanager
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "prices.db"))
 STATUS_PATH = os.path.join(os.path.dirname(DB_PATH), "status.json")
-COMPANIES_CSV = os.environ.get("COMPANIES_CSV", os.path.join(BASE_DIR, "data", "companies.csv"))
+# 명단 이력: data/lists/<공표일 YYYY-MM-DD>.csv — 공표일부터 다음 명단 공표 전날까지 적용
+LISTS_DIR = os.environ.get("LISTS_DIR", os.path.join(BASE_DIR, "data", "lists"))
 INDEXES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
 
 SCHEMA = ("CREATE TABLE IF NOT EXISTS prices (code TEXT NOT NULL, date TEXT NOT NULL, "
@@ -114,12 +115,33 @@ def market_caps():
     return out
 
 
-def load_companies():
-    """data/companies.csv (code,name,market) 를 읽는다. 없으면 빈 목록."""
-    if not os.path.exists(COMPANIES_CSV):
+def list_versions():
+    """보관된 명단의 공표일 목록 (오름차순)."""
+    if not os.path.isdir(LISTS_DIR):
         return []
+    out = []
+    for fn in os.listdir(LISTS_DIR):
+        name, ext = os.path.splitext(fn)
+        if ext == ".csv" and len(name) == 10 and name[4] == "-" and name[7] == "-":
+            out.append(name)
+    return sorted(out)
+
+
+def list_version_for(as_of=None):
+    """as_of 날짜에 적용되는 명단의 공표일. as_of 가 없으면 최신 명단,
+    첫 명단 공표 전 날짜면 첫 명단."""
+    vers = list_versions()
+    if not vers:
+        return None
+    if not as_of:
+        return vers[-1]
+    ok = [v for v in vers if v <= as_of]
+    return ok[-1] if ok else vers[0]
+
+
+def _read_list(version):
     rows = []
-    with open(COMPANIES_CSV, encoding="utf-8-sig") as f:
+    with open(os.path.join(LISTS_DIR, version + ".csv"), encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             code = (r.get("code") or "").strip()
             if not code or code.startswith("#"):
@@ -132,6 +154,38 @@ def load_companies():
                 "gics": (r.get("gics") or "").strip(),
             })
     return rows
+
+
+def load_companies(as_of=None):
+    """as_of 날짜에 적용되는 명단 (기본: 최신 명단). 없으면 빈 목록."""
+    ver = list_version_for(as_of)
+    return _read_list(ver) if ver else []
+
+
+def all_companies():
+    """보관된 모든 명단의 합집합 (같은 종목은 최신 명단 정보 우선). 시세 수집용."""
+    out = {}
+    for ver in list_versions():
+        for c in _read_list(ver):
+            out[c["code"]] = c
+    return list(out.values())
+
+
+def list_history():
+    """[{date, count, kospi, kosdaq, added, removed}] — 명단별 규모와 직전 명단 대비 편입·제외 수."""
+    out, prev = [], None
+    for ver in list_versions():
+        rows = _read_list(ver)
+        codes = {c["code"] for c in rows}
+        out.append({
+            "date": ver, "count": len(rows),
+            "kospi": sum(1 for c in rows if c["market"] == "KOSPI"),
+            "kosdaq": sum(1 for c in rows if c["market"] == "KOSDAQ"),
+            "added": len(codes - prev) if prev is not None else None,
+            "removed": len(prev - codes) if prev is not None else None,
+        })
+        prev = codes
+    return out
 
 
 def _read_status():

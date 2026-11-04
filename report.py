@@ -101,7 +101,10 @@ def _change(rows):
 
 
 def build(start, end, label, band=0.5):
-    companies = store.load_companies()
+    # 기간 시작일에 적용되던 명단으로 집계 (명단 이력 보관)
+    list_ver = store.list_version_for(start)
+    companies = store.load_companies(start)
+    later = [v for v in store.list_versions() if start < v <= end]   # 기간 중 새 명단 공표
 
     with store.connect() as c:
         idx_dates = [r["date"] for r in c.execute(
@@ -186,6 +189,7 @@ def build(start, end, label, band=0.5):
                  "weekday_names": [WEEKDAYS[dt.date.fromisoformat(d).weekday()] for d in idx_dates]},
         "band": band,
         "universe": len(companies),
+        "list": {"date": list_ver, "count": len(companies), "changed_in_period": later},
         "total": total,
         "summary": {k: summary(v) for k, v in groups.items()},
         "overall": {
@@ -205,7 +209,7 @@ def build(start, end, label, band=0.5):
 
 def compare(codes, start, end):
     """선택 기업들의 기간 내 일별 시가·종가와 누적 등락률(첫 시가 기준)."""
-    names = {c["code"]: c for c in store.load_companies()}
+    names = {c["code"]: c for c in store.all_companies()}
     out = []
     with store.connect() as c:
         dates = [r["date"] for r in c.execute(

@@ -228,6 +228,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtListDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${y}. ${m}. ${d}.`; };
 const fmtPct = (v, d = 2) => v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(d) + '%';
 const fmtPp = v => v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
 const cls = v => v == null ? 'zero' : v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
@@ -280,7 +281,7 @@ async function loadMeta() {
   meta = await getJSON('/api/weeks');
   showBuild(meta.build);
   const t = meta.last_refresh ? new Date(meta.last_refresh).toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}) + ' (KST)' : '없음';
-  $('#meta').textContent = `대상 ${meta.universe}개사 · 마지막 갱신 ${t}${meta.refreshing ? ' · 갱신 중…' : ''}`;
+  $('#meta').textContent = `대상 ${meta.universe}개사${meta.list_date ? ` (${fmtListDate(meta.list_date)} 공표 명단)` : ''} · 마지막 갱신 ${t}${meta.refreshing ? ' · 갱신 중…' : ''}`;
   fillPeriodSelects();
   if (meta.range.min) {
     for (const el of [$('#cstart'), $('#cend')]) { el.min = meta.range.min; el.max = meta.range.max; }
@@ -290,7 +291,7 @@ async function loadMeta() {
   }
   if (!meta.universe) {
     $('#content').innerHTML = `<div class="card warn"><h2>대상 기업 명단이 아직 없습니다</h2>
-      <p>data/companies.csv 에 KIND 저PBR 기업 명단(code,name,market)을 넣은 뒤 데이터를 갱신하세요.</p></div>`;
+      <p>data/lists/공표일.csv 에 KIND 저PBR 기업 명단을 넣은 뒤 데이터를 갱신하세요 (tools/import_kind_list.py 사용).</p></div>`;
     return false;
   }
   if (!meta.weeks.length) {
@@ -369,10 +370,14 @@ function renderReport() {
   const gainers = all.filter(r => r.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 10);
   const losers = all.filter(r => r.pct < 0).sort((a, b) => a.pct - b.pct).slice(0, 10);
 
+  const listTag = d.list && d.list.date ? ` · 명단 ${fmtListDate(d.list.date)} 공표 ${d.list.count}개사` : '';
+  const listWarn = d.list && d.list.changed_in_period && d.list.changed_in_period.length
+    ? `<div class="sub warnnote" style="margin:4px 0 6px">기간 중 ${d.list.changed_in_period.map(fmtListDate).join(', ')}에 새 명단이 공표됐지만, 이 보고서는 기간 시작일 기준 명단으로 집계했습니다.</div>` : '';
   $('#content').innerHTML = `
-  <div class="print-only" style="margin-bottom:8px"><b>보고 기간</b> ${d.week.label} · ${period} · 보합 ±${d.band}%</div>
+  <div class="print-only" style="margin-bottom:8px"><b>보고 기간</b> ${d.week.label} · ${period} · 보합 ±${d.band}%${listTag}</div>
   <section class="card">
-    <div class="sub">${d.week.label} · ${period} · 보합 기준 ±${d.band}%${progress}</div>
+    <div class="sub">${d.week.label} · ${period} · 보합 기준 ±${d.band}%${listTag}${progress}</div>
+    ${listWarn}
     <p class="headline">${headline}</p>
     <div class="stackbar" role="img" aria-label="상승 ${s.up.count}, 보합 ${s.flat.count}, 하락 ${s.down.count}">
       ${['up','flat','down'].filter(k => s[k].count).map(k => `<div style="flex:${s[k].count};background:var(--${k})" title="${STATUS[k]} ${s[k].count}개사"></div>`).join('')}
