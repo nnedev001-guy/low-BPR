@@ -101,10 +101,15 @@ def _change(rows):
 
 
 def build(start, end, label, band=0.5):
-    # 기간 시작일에 적용되던 명단으로 집계 (명단 이력 보관)
-    list_ver = store.list_version_for(start)
-    companies = store.load_companies(start)
-    later = [v for v in store.list_versions() if start < v <= end]   # 기간 중 새 명단 공표
+    # 기간 첫 거래일에 적용되던 명단으로 집계 (명단 이력 보관).
+    # 월간(예: 5월 1일 시작)은 달력 1일이 아니라 첫 거래일 기준이어야 첫 거래일 공표 명단이 바로 적용된다.
+    with store.connect() as c:
+        first = c.execute("SELECT MIN(date) FROM prices WHERE code='KOSPI' AND date BETWEEN ? AND ?",
+                          (start, end)).fetchone()[0]
+    basis = max(first or start, start)
+    list_ver = store.list_version_for(basis)
+    companies = store.load_companies(basis)
+    later = [v for v in store.list_versions() if basis < v <= end]   # 기간 중 새 명단 공표
 
     with store.connect() as c:
         idx_dates = [r["date"] for r in c.execute(
