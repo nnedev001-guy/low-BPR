@@ -98,7 +98,7 @@ def days_needed():
 
 
 def run(verbose=True):
-    companies = store.load_companies()
+    companies = store.all_companies()   # 과거 명단 기업도 계속 수집 (이전 기간 보고서용)
     n = days_needed()
     symbols = list(store.INDEXES) + [c["code"] for c in companies]
     errors, ok = [], 0

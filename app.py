@@ -95,6 +95,8 @@ def weeks():
     out = {
         "companies": companies,
         "universe": len(companies),
+        "list_date": store.list_version_for(),
+        "lists": store.list_history(),
         "refreshing": _lock.locked(),
         "progress": dict(refresh.PROGRESS),
         "build": BUILD,
@@ -137,6 +139,7 @@ def diag():
         t = time.time()
 
     mark("companies", lambda: len(store.load_companies()))
+    mark("lists", lambda: store.list_history())
     mark("db_path", lambda: store.DB_PATH)
     mark("db_meta", lambda: store.get_meta("last_refresh"))
     mark("db_rows", lambda: _count_rows())
