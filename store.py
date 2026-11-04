@@ -21,6 +21,8 @@ INDEXES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
 
 SCHEMA = ("CREATE TABLE IF NOT EXISTS prices (code TEXT NOT NULL, date TEXT NOT NULL, "
           "open REAL, high REAL, low REAL, close REAL, volume REAL, PRIMARY KEY (code, date))")
+SCHEMA_INFO = ("CREATE TABLE IF NOT EXISTS info (code TEXT PRIMARY KEY, market_cap REAL, "
+               "shares REAL, as_of TEXT)")   # 시가총액(억 원), 주식수(시총/당시 종가로 역산)
 _status_lock = threading.Lock()
 
 
@@ -32,6 +34,7 @@ def _ensure_db():
     tmp = f"{DB_PATH}.init.{os.getpid()}.{threading.get_ident()}"
     conn = sqlite3.connect(tmp)
     conn.execute(SCHEMA)
+    conn.execute(SCHEMA_INFO)
     conn.commit()
     conn.close()
     if not os.path.exists(DB_PATH):
@@ -52,30 +55,63 @@ def connect():
         conn.close()
 
 
-def replace_prices(rows_by_code):
+def replace_prices(rows_by_code, market_caps=None):
     """새 DB 파일에 시세를 모두 쓴 뒤 기존 DB와 한 번에 교체.
     rows_by_code: {code: [(date, open, high, low, close, volume), ...]}
-    받지 못한 종목(None)은 기존 DB에 있던 값을 그대로 옮긴다."""
+    market_caps: {code: 시가총액(억 원)}
+    받지 못한 종목(None)·시가총액은 기존 DB에 있던 값을 그대로 옮긴다."""
     _ensure_db()
+    market_caps = market_caps or {}
     tmp = f"{DB_PATH}.new.{os.getpid()}"
     if os.path.exists(tmp):
         os.remove(tmp)
     new = sqlite3.connect(tmp)
     new.execute(SCHEMA)
+    new.execute(SCHEMA_INFO)
     keep = [code for code, rows in rows_by_code.items() if not rows]
-    if keep:
-        with connect() as old:
-            for code in keep:
-                new.executemany(
-                    "INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)",
-                    [tuple(r) for r in old.execute("SELECT * FROM prices WHERE code=?", (code,))])
+    with connect() as old:
+        for code in keep:
+            new.executemany(
+                "INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)",
+                [tuple(r) for r in old.execute("SELECT * FROM prices WHERE code=?", (code,))])
+        try:   # 이전 버전 DB에는 info 테이블이 없을 수 있음
+            old_info = {r["code"]: tuple(r) for r in old.execute("SELECT * FROM info")}
+        except sqlite3.OperationalError:
+            old_info = {}
     for code, rows in rows_by_code.items():
         if rows:
             new.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)",
                             [(code, *r) for r in rows])
+    today = max((r[0] for rows in rows_by_code.values() if rows for r in rows), default="")
+    for code, cap in market_caps.items():
+        rows = rows_by_code.get(code) or []
+        last_close = next((r[4] for r in reversed(rows) if r[4]), None)
+        shares = cap * 1e8 / last_close if last_close else None
+        old_info.pop(code, None)
+        new.execute("INSERT OR REPLACE INTO info VALUES (?,?,?,?)", (code, cap, shares, today))
+    for row in old_info.values():
+        new.execute("INSERT OR REPLACE INTO info VALUES (?,?,?,?)", row)
     new.commit()
     new.close()
     os.replace(tmp, DB_PATH)
+
+
+def market_caps():
+    """{code: {"market_cap": 억 원, "as_of": 날짜}} — 최신 종가 × 주식수로 다시 계산."""
+    out = {}
+    with connect() as c:
+        try:
+            rows = c.execute(
+                "SELECT i.code, i.market_cap, i.shares, i.as_of, "
+                "(SELECT close FROM prices p WHERE p.code=i.code AND p.close>0 ORDER BY date DESC LIMIT 1) AS last_close, "
+                "(SELECT date FROM prices p WHERE p.code=i.code AND p.close>0 ORDER BY date DESC LIMIT 1) AS last_date "
+                "FROM info i").fetchall()
+        except sqlite3.OperationalError:
+            return out
+    for r in rows:
+        cap = r["shares"] * r["last_close"] / 1e8 if r["shares"] and r["last_close"] else r["market_cap"]
+        out[r["code"]] = {"market_cap": cap, "as_of": r["last_date"] or r["as_of"]}
+    return out
 
 
 def load_companies():
@@ -92,6 +128,8 @@ def load_companies():
                 "code": code.zfill(6),
                 "name": (r.get("name") or "").strip(),
                 "market": (r.get("market") or "").strip().upper(),
+                "pbr": (r.get("pbr") or "").strip(),
+                "gics": (r.get("gics") or "").strip(),
             })
     return rows
 

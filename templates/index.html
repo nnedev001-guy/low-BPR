@@ -98,12 +98,24 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 13px; }
 .chip button { border: none; background: none; padding: 0 4px; color: var(--text-2); font-size: 15px; line-height: 1; }
-.searchbox { position: relative; }
-.searchbox input { width: 240px; }
-.suggest { position: absolute; z-index: 10; top: 100%; left: 0; right: 0; max-height: 260px; overflow-y: auto; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 6px; margin-top: 2px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; }
-.suggest div { padding: 6px 10px; cursor: pointer; font-size: 13px; }
-.suggest div:hover, .suggest div.hi { background: var(--surface-2); }
+.combo { position: relative; }
+#combo-btn { min-width: 170px; text-align: left; }
+.combo-panel { display: none; position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 440px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 10px; }
+.combo-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.combo-top input { flex: 1; min-width: 140px; }
+.combo-info { font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+.combo-list { max-height: 340px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.combo-row { display: grid; grid-template-columns: 20px 28px 1fr auto 64px; gap: 6px; align-items: center; padding: 6px 4px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--surface-2); }
+.combo-row:hover { background: var(--surface-2); }
+.combo-row.on { background: var(--surface-2); font-weight: 500; }
+.combo-row.dis { opacity: .45; cursor: default; }
+.combo-row input { padding: 0; margin: 0; }
+.combo-row .rk { color: var(--muted); font-size: 11px; text-align: right; }
+.combo-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-row .cap { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.combo-foot { display: flex; justify-content: space-between; margin-top: 8px; }
+@media (max-width: 520px) { .combo-panel { position: fixed; left: 16px; right: 16px; top: 120px; width: auto; } }
 .foot { color: var(--muted); font-size: 12px; margin-top: 20px; }
 .print-only, img.printimg { display: none; }
 /* PDF 캡처 모드 */
@@ -181,9 +193,17 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
   <!-- 기업 비교 -->
   <section id="view-compare" style="display:none">
     <div class="controlbar">
-      <div class="searchbox">
-        <input id="search" placeholder="기업명 또는 종목코드 검색" autocomplete="off">
-        <div class="suggest" id="suggest"></div>
+      <div class="combo">
+        <button id="combo-btn" aria-haspopup="listbox" aria-expanded="false">기업 선택</button>
+        <div class="combo-panel" id="combo-panel">
+          <div class="combo-top">
+            <span class="seg" id="combo-mkt"><button data-v="ALL" class="on">전체</button><button data-v="KOSPI">코스피</button><button data-v="KOSDAQ">코스닥</button></span>
+            <input id="combo-search" placeholder="목록 안에서 찾기" autocomplete="off">
+          </div>
+          <div class="combo-info" id="combo-info"></div>
+          <div class="combo-list" id="combo-list" role="listbox" aria-multiselectable="true"></div>
+          <div class="combo-foot"><button id="combo-clear">선택 해제</button><button class="primary" id="combo-done">선택 완료</button></div>
+        </div>
       </div>
       <label>시작 <input type="date" id="cstart"></label>
       <label>종료 <input type="date" id="cend"></label>
@@ -193,7 +213,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
       <button class="primary" id="pdf-compare">PDF 다운로드</button>
     </div>
     <div class="chips" id="chips" style="margin-bottom:12px"></div>
-    <div id="ccontent"><div class="card empty">비교할 기업을 검색해서 추가하세요. 최대 8개사까지 선택할 수 있습니다.</div></div>
+    <div id="ccontent"><div class="card empty">위의 "기업 선택"을 눌러 비교할 기업을 고르세요. 최대 8개사까지 선택할 수 있습니다.</div></div>
   </section>
 
   <div class="foot">기준: 기간 등락률 = 기간 첫 거래일 시가 → 마지막 거래일 종가. 지수 대비 = 기업 등락률 − 소속 시장 지수 등락률(%p).
@@ -528,47 +548,100 @@ function renderChips() {
 
 function syncCompare() {
   renderChips();
+  if ($('#combo-btn')) renderComboBtn();
   const q = new URLSearchParams(location.search);
   q.set('view', 'compare'); q.set('codes', selected.join(',')); q.set('start', $('#cstart').value); q.set('end', $('#cend').value);
   history.replaceState(null, '', '?' + q.toString());
   loadCompare();
 }
 
-function setupSearch() {
-  const inp = $('#search'), box = $('#suggest');
-  let hi = 0, list = [];
-  const show = () => {
-    const t = inp.value.trim().toLowerCase();
-    if (!t) { box.style.display = 'none'; return; }
-    const rank = c => { const n = c.name.toLowerCase(); return n === t || c.code === t ? 0 : n.startsWith(t) || c.code.startsWith(t) ? 1 : 2; };
-    list = meta.companies.filter(c => !selected.includes(c.code) && (c.name.toLowerCase().includes(t) || c.code.includes(t)))
-      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ko')).slice(0, 30);
-    hi = 0;
-    box.innerHTML = list.length ? list.map((c, i) => `<div data-code="${c.code}" class="${i === 0 ? 'hi' : ''}">${esc(c.name)} <span class="sub">${c.code} · ${MKT[c.market] || ''}</span></div>`).join('')
-      : '<div class="sub">일치하는 기업이 없습니다</div>';
-    box.style.display = 'block';
-    $$('#suggest div[data-code]').forEach(d => d.onmousedown = e => { e.preventDefault(); add(d.dataset.code); });
-  };
-  const add = code => {
-    if (selected.length >= MAX_SEL) { alert(`최대 ${MAX_SEL}개사까지 비교할 수 있습니다.`); return; }
-    selected.push(code); inp.value = ''; box.style.display = 'none'; syncCompare();
-  };
-  inp.oninput = show;
-  inp.onfocus = show;
-  inp.onblur = () => setTimeout(() => box.style.display = 'none', 100);
-  inp.onkeydown = e => {
-    const items = $$('#suggest div[data-code]');
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault(); hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-      items.forEach((d, i) => d.classList.toggle('hi', i === hi));
-    } else if (e.key === 'Enter' && items[hi]) { e.preventDefault(); add(items[hi].dataset.code); }
-  };
+function fmtCap(v) {
+  if (v == null) return '–';
+  if (v >= 10000) return (v / 10000).toFixed(v >= 100000 ? 1 : 2) + '조';
+  return Math.round(v).toLocaleString('ko-KR') + '억';
+}
+
+let comboMarket = 'ALL', comboDirty = false;
+
+function renderComboBtn() {
+  $('#combo-btn').innerHTML = `기업 선택 <b>${selected.length}</b>/${MAX_SEL} <span aria-hidden="true">▾</span>`;
+}
+
+function renderComboList() {
+  const t = $('#combo-search').value.trim().toLowerCase();
+  const all = meta.companies;   // 서버에서 시가총액 내림차순으로 정렬해 줌
+  const inMkt = all.filter(c => comboMarket === 'ALL' || c.market === comboMarket);
+  const list = inMkt.filter(c => !t || c.name.toLowerCase().includes(t) || c.code.includes(t));
+  const hasCap = all.some(c => c.market_cap != null);
+  const full = selected.length >= MAX_SEL;
+  $('#combo-info').textContent = `${{ALL: '전체', KOSPI: '코스피', KOSDAQ: '코스닥'}[comboMarket]} ${inMkt.length}개사`
+    + (hasCap ? ` · 시가총액 큰 순${meta.market_cap_as_of ? ` (${md(meta.market_cap_as_of)} 종가 기준)` : ''}` : ' · 시가총액 정보 없음(가나다순)')
+    + (full ? ` · 최대 ${MAX_SEL}개사 선택됨` : '');
+  const sorted = hasCap ? list : [...list].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  $('#combo-list').innerHTML = sorted.length ? sorted.map(c => {
+    const on = selected.includes(c.code), idx = selected.indexOf(c.code);
+    const rank = inMkt.indexOf(c) + 1;
+    return `<label class="combo-row${on ? ' on' : ''}${!on && full ? ' dis' : ''}">
+      <input type="checkbox" data-code="${c.code}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
+      <span class="rk">${hasCap ? rank : ''}</span>
+      <span class="nm">${on ? `<i class="mark" style="background:var(--c${idx + 1})"></i>` : ''}${esc(c.name)}</span>
+      <span class="tag">${MKT[c.market] || ''}</span>
+      <span class="cap">${fmtCap(c.market_cap)}</span>
+    </label>`;
+  }).join('') : '<div class="empty">일치하는 기업이 없습니다</div>';
+  $$('#combo-list input[type=checkbox]').forEach(cb => cb.onchange = () => {
+    const code = cb.dataset.code;
+    if (cb.checked) { if (selected.length < MAX_SEL && !selected.includes(code)) selected.push(code); }
+    else selected = selected.filter(x => x !== code);
+    comboDirty = true;
+    renderComboBtn(); renderChips(); refreshComboRows();
+  });
+}
+
+// 목록을 다시 그리지 않고 체크 상태·색 표시·비활성만 갱신 (스크롤 위치 유지)
+function refreshComboRows() {
+  const full = selected.length >= MAX_SEL;
+  $$('#combo-list .combo-row').forEach(row => {
+    const cb = row.querySelector('input'), code = cb.dataset.code;
+    const on = selected.includes(code), idx = selected.indexOf(code);
+    cb.checked = on; cb.disabled = !on && full;
+    row.classList.toggle('on', on); row.classList.toggle('dis', !on && full);
+    const nm = row.querySelector('.nm'), mk = nm.querySelector('.mark');
+    if (on && !mk) nm.insertAdjacentHTML('afterbegin', `<i class="mark" style="background:var(--c${idx + 1})"></i>`);
+    else if (!on && mk) mk.remove();
+    else if (on && mk) mk.style.background = `var(--c${idx + 1})`;
+  });
+  const info = $('#combo-info');
+  info.textContent = info.textContent.replace(/ · 최대 \d+개사 선택됨$/, '') + (full ? ` · 최대 ${MAX_SEL}개사 선택됨` : '');
+}
+
+function openCombo(open) {
+  const panel = $('#combo-panel');
+  const isOpen = panel.style.display === 'block';
+  if (open === undefined) open = !isOpen;
+  if (open === isOpen) return;
+  panel.style.display = open ? 'block' : 'none';
+  $('#combo-btn').setAttribute('aria-expanded', open);
+  if (open) { comboDirty = false; renderComboList(); setTimeout(() => $('#combo-search').focus(), 0); }
+  else if (comboDirty) { comboDirty = false; syncCompare(); }
+}
+
+function setupCombo() {
+  renderComboBtn();
+  $('#combo-btn').onclick = e => { e.stopPropagation(); openCombo(); };
+  $('#combo-done').onclick = () => openCombo(false);
+  $('#combo-clear').onclick = () => { selected = []; comboDirty = true; renderComboBtn(); renderChips(); refreshComboRows(); };
+  $('#combo-search').oninput = renderComboList;
+  $('#combo-search').onkeydown = e => { if (e.key === 'Escape') openCombo(false); };
+  $$('#combo-mkt button').forEach(b => b.onclick = () => { comboMarket = b.dataset.v; segOn('#combo-mkt', b); renderComboList(); });
+  $('#combo-panel').onclick = e => e.stopPropagation();
+  document.addEventListener('click', () => openCombo(false));
 }
 
 async function loadCompare() {
   cCharts.forEach(c => c.destroy()); cCharts = [];
   if (!selected.length) {
-    $('#ccontent').innerHTML = '<div class="card empty">비교할 기업을 검색해서 추가하세요. 최대 8개사까지 선택할 수 있습니다.</div>';
+    $('#ccontent').innerHTML = '<div class="card empty">위의 "기업 선택"을 눌러 비교할 기업을 고르세요. 최대 8개사까지 선택할 수 있습니다.</div>';
     return;
   }
   cdata = await fetch(`/api/compare?codes=${selected.join(',')}&start=${$('#cstart').value}&end=${$('#cend').value}`).then(r => r.json());
@@ -745,7 +818,7 @@ $('#refresh').onclick = async () => {
   let ok = false;
   try { ok = await loadMeta(); }
   catch (e) { showError(e.message, boot); setTimeout(() => { if ($('#retry')) boot(); }, 15000); return; }
-  setupSearch();
+  setupCombo();
   if (q.get('codes')) selected = q.get('codes').split(',').filter(c => meta.companies.some(x => x.code === c)).slice(0, MAX_SEL);
   if (ok) await loadReport();
   if (q.get('view') === 'compare') setView('compare');

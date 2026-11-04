@@ -102,6 +102,11 @@ def weeks():
         "last_refresh": None, "last_refresh_ok": 0, "last_refresh_errors": [],
     }
     try:
+        caps = store.market_caps()
+        for c in companies:
+            c["market_cap"] = (caps.get(c["code"]) or {}).get("market_cap")
+        companies.sort(key=lambda c: (c["market_cap"] is None, -(c["market_cap"] or 0), c["name"]))
+        out["market_cap_as_of"] = max((v["as_of"] or "" for v in caps.values()), default=None)
         out.update({
             "weeks": report.available_weeks(),
             "months": report.available_months(),
@@ -136,6 +141,9 @@ def diag():
     mark("db_meta", lambda: store.get_meta("last_refresh"))
     mark("db_rows", lambda: _count_rows())
     mark("naver", lambda: len(refresh.fetch("KOSPI", 3)[1]))
+    mark("market_cap_sample", lambda: refresh.fetch_market_cap("004020"))
+    mark("market_cap_stored", lambda: len(store.market_caps()))
+    mark("market_cap_last_error", lambda: store.get_meta("market_cap_error"))
     return jsonify({"build": BUILD, "refreshing": _lock.locked(), "progress": dict(refresh.PROGRESS),
                     "threads": [th.name for th in threading.enumerate()], "steps": steps})
 
