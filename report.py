@@ -13,6 +13,15 @@ def week_label(monday):
 
 
 REPORT_START = "2026-11-02"   # 저PBR 명단 공표일
+MAX_MONTHS = 2                # 기업 비교·여러 주 합산 최대 기간
+
+
+def add_months(iso, n):
+    import calendar
+    d = dt.date.fromisoformat(iso)
+    y, m = divmod(d.month - 1 + n, 12)
+    y, m = d.year + y, m + 1
+    return dt.date(y, m, min(d.day, calendar.monthrange(y, m)[1])).isoformat()
 
 
 def _trading_dates(start="0000-00-00", end="9999-99-99"):
@@ -68,6 +77,9 @@ def resolve_period(kind, a, b=None):
         m2 -= dt.timedelta(days=m2.weekday())
         if m2 < m1:
             m1, m2 = m2, m1
+        limit = dt.date.fromisoformat(add_months(m1.isoformat(), MAX_MONTHS))
+        while m2 + dt.timedelta(days=4) > limit:   # 최대 2개월
+            m2 -= dt.timedelta(days=7)
     label = week_label(m1) if m1 == m2 else f"{week_label(m1)}~{week_label(m2)}"
     return m1.isoformat(), (m2 + dt.timedelta(days=4)).isoformat(), label
 

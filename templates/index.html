@@ -41,6 +41,7 @@
 body { margin: 0; background: var(--bg); color: var(--text);
   font-family: "Noto Sans KR", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 60px; }
+@media (min-width: 1700px) { .wrap { max-width: 1600px; } .chartbox { height: 300px; } .chartbox.tall { height: 400px; } }
 header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
 h1 { font-size: 22px; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .build { font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
@@ -116,6 +117,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
 .combo-row .cap { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .combo-foot { display: flex; justify-content: space-between; margin-top: 8px; }
 @media (max-width: 520px) { .combo-panel { position: fixed; left: 16px; right: 16px; top: 120px; width: auto; } }
+.warnnote { margin: -6px 0 10px; color: #b26b00; }
 .foot { color: var(--muted); font-size: 12px; margin-top: 20px; }
 .print-only, img.printimg { display: none; }
 /* PDF 캡처 모드 */
@@ -187,6 +189,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
       <button onclick="window.print()">인쇄</button>
       <button class="primary" id="pdf-report">PDF 다운로드</button>
     </div>
+    <div class="sub warnnote" id="range-note-r" style="display:none"></div>
     <div id="content"><div class="card empty">불러오는 중…</div></div>
   </section>
 
@@ -212,6 +215,7 @@ tr.detail td { background: var(--surface-2); text-align: left; white-space: norm
       <button onclick="window.print()">인쇄</button>
       <button class="primary" id="pdf-compare">PDF 다운로드</button>
     </div>
+    <div class="sub warnnote" id="range-note" style="display:none"></div>
     <div class="chips" id="chips" style="margin-bottom:12px"></div>
     <div id="ccontent"><div class="card empty">위의 "기업 선택"을 눌러 비교할 기업을 고르세요. 최대 8개사까지 선택할 수 있습니다.</div></div>
   </section>
@@ -282,6 +286,7 @@ async function loadMeta() {
     for (const el of [$('#cstart'), $('#cend')]) { el.min = meta.range.min; el.max = meta.range.max; }
     if (!$('#cstart').value) $('#cstart').value = meta.weeks.length ? meta.weeks.at(-1).monday : meta.range.min;
     if (!$('#cend').value) $('#cend').value = meta.range.max;
+    clampCompareRange('end');
   }
   if (!meta.universe) {
     $('#content').innerHTML = `<div class="card warn"><h2>대상 기업 명단이 아직 없습니다</h2>
@@ -334,6 +339,7 @@ function fillPeriodSelects() {
     if (prevB && [...pb.options].some(o => o.value === prevB)) pb.value = prevB;
     else pb.value = meta.weeks[0]?.monday;
     if (!prevA || ![...pa.options].some(o => o.value === prevA)) pa.value = meta.weeks.at(-1)?.monday;
+    clampWeeks();
   }
 }
 
@@ -526,6 +532,51 @@ function drawHist(all) {
   rCharts.push(new Chart($('#hist'), { type: 'bar',
     data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom' }] },
     options: o }));
+}
+
+
+/* ---------- 기간 최대 2개월 ---------- */
+const MAX_MONTHS = 2;
+function addMonths(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate();      // 대상 월의 마지막 날
+  const t = new Date(Date.UTC(y, m - 1 + n, Math.min(d, last)));
+  return t.toISOString().slice(0, 10);
+}
+function rangeNote(msg) {
+  const el = $(view === 'compare' ? '#range-note' : '#range-note-r'); if (!el) return;
+  el.textContent = msg || ''; el.style.display = msg ? '' : 'none';
+  if (msg) { clearTimeout(rangeNote.t); rangeNote.t = setTimeout(() => { el.style.display = 'none'; }, 6000); }
+}
+// 기업 비교: 바꾼 쪽을 기준으로 다른 쪽을 2개월 안으로 맞춤
+function clampCompareRange(changed) {
+  const s = $('#cstart'), e = $('#cend');
+  if (!s.value || !e.value) return;
+  if (e.value < s.value) { if (changed === 'start') e.value = s.value; else s.value = e.value; }
+  if (changed === 'end') {
+    const minStart = addMonths(e.value, -MAX_MONTHS);
+    if (s.value < minStart) { s.value = minStart < s.min ? s.min : minStart; rangeNote(`기간은 최대 ${MAX_MONTHS}개월까지 선택할 수 있어 시작일을 ${s.value}로 맞췄습니다.`); }
+  } else {
+    const maxEnd = addMonths(s.value, MAX_MONTHS);
+    if (e.value > maxEnd) { e.value = maxEnd; rangeNote(`기간은 최대 ${MAX_MONTHS}개월까지 선택할 수 있어 종료일을 ${maxEnd}로 맞췄습니다.`); }
+  }
+}
+// 여러 주 합산: 시작 주로부터 2개월 넘는 끝 주는 선택 불가
+function clampWeeks() {
+  if ($('#kind').value !== 'weeks') return;
+  const pa = $('#pa'), pb = $('#pb');
+  const maxEnd = addMonths(pa.value, MAX_MONTHS);
+  let changed = false;
+  [...pb.options].forEach(o => {
+    const fri = addMonths(o.value, 0); const friday = new Date(fri + 'T00:00:00Z'); friday.setUTCDate(friday.getUTCDate() + 4);
+    o.disabled = o.value < pa.value || friday.toISOString().slice(0, 10) > maxEnd;
+  });
+  if (pb.selectedOptions[0]?.disabled || pb.value < pa.value) {
+    const ok = [...pb.options].filter(o => !o.disabled);
+    pb.value = ok.length ? ok[0].value : pa.value;   // 옵션은 최신 주가 먼저 → 허용 범위의 가장 늦은 주
+    changed = true;
+  }
+  if (changed) rangeNote(`여러 주 합산은 최대 ${MAX_MONTHS}개월까지 선택할 수 있습니다.`);
 }
 
 /* ---------- 기업 비교 ---------- */
@@ -792,11 +843,11 @@ function setView(v) {
 }
 $$('.viewtabs button').forEach(b => b.onclick = () => setView(b.dataset.view));
 $('#kind').onchange = () => { $('#pa').value = ''; fillPeriodSelects(); loadReport(); };
-$('#pa').onchange = loadReport;
+$('#pa').onchange = () => { clampWeeks(); loadReport(); };
 $('#pb').onchange = loadReport;
 $('#band').onchange = loadReport;
-$('#cstart').onchange = syncCompare;
-$('#cend').onchange = syncCompare;
+$('#cstart').onchange = () => { clampCompareRange('start'); syncCompare(); };
+$('#cend').onchange = () => { clampCompareRange('end'); syncCompare(); };
 $('#cindex').onchange = () => cdata && renderCompare();
 $('#refresh').onclick = async () => {
   $('#refresh').disabled = true; $('#refresh').textContent = '갱신 중…';
@@ -820,6 +871,7 @@ $('#refresh').onclick = async () => {
   catch (e) { showError(e.message, boot); setTimeout(() => { if ($('#retry')) boot(); }, 15000); return; }
   setupCombo();
   if (q.get('codes')) selected = q.get('codes').split(',').filter(c => meta.companies.some(x => x.code === c)).slice(0, MAX_SEL);
+  renderComboBtn();
   if (ok) await loadReport();
   if (q.get('view') === 'compare') setView('compare');
 })();

@@ -178,6 +178,7 @@ def api_compare():
         return jsonify({"error": "기업과 기간을 선택하세요."}), 400
     if end < start:
         start, end = end, start
+    end = min(end, report.add_months(start, report.MAX_MONTHS))   # 최대 2개월
     return jsonify(report.compare(codes, start, end))
 
 
